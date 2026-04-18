@@ -1,8 +1,17 @@
 from bisection import BISRelADOpyWrapper as qw
 import numpy as np
+import random
+
+# Configuration
+USE_FIXED_TRIALS = True  # Set to False to use only adaptive trials
 
 nTrials = 56
 offset = 500
+nAdaptive = 36  # Adaptive trials (used only if USE_FIXED_TRIALS=True)
+nFixed = 10  # Fixed trials (repeated twice: once at start, once mixed) - 5 pre + 5 post each time
+
+# Fixed relative offsets (5 values, will be applied as ±offset)
+FIXED_OFFSETS_REL = [25, 75, 125, 175, 225]  # Creates 10 latencies: 5 pre + 5 post
 
 # Initialize two models: pre and post
 ado_params_pre = {"guess_rate": 0.5, "lapse_rate": 0.04, "noise_perc": 0.1}
@@ -19,45 +28,79 @@ print("="*60)
 print("BISECTION TEST - 2 MODEL RELATIVE")
 print("="*60)
 print(f"Test parameters: guess_rate={ado_params_pre['guess_rate']}, lapse_rate={ado_params_pre['lapse_rate']}")
-print(f"Total trials: {nTrials}")
+if USE_FIXED_TRIALS:
+    print(f"Total trials: {nTrials} ({nFixed} fixed at start [5 pre + 5 post], {nAdaptive} adaptive, {nFixed} fixed mixed [5 pre + 5 post])")
+else:
+    print(f"Total trials: {nTrials} (all adaptive)")
 print("="*60)
 
-# Create trial order: every 8 trials, randomize 4 pre and 4 post
-trial_order = []
-for block in range(int(nTrials) // 8):
-    block_trials = ['pre'] * 4 + ['post'] * 4
-    np.random.shuffle(block_trials)
-    trial_order.extend(block_trials)
-
-# Handle remaining trials if nTrials is not divisible by 8
-remaining = int(nTrials) % 8
-if remaining > 0:
-    remaining_trials = ['pre'] * min(4, remaining) + ['post'] * max(0, remaining - 4)
-    np.random.shuffle(remaining_trials)
-    trial_order.extend(remaining_trials)
+# Create trial sequence
+if USE_FIXED_TRIALS:
+    # First 10 trials: 5 pre + 5 post in order
+    trial_sequence = []
+    for offset_val in FIXED_OFFSETS_REL:
+        trial_sequence.append((offset - offset_val, 'pre', 'fixed'))  # pre
+        trial_sequence.append((offset + offset_val, 'post', 'fixed'))  # post
+    
+    # Remaining trials: adaptive + 10 fixed (5 pre + 5 post) mixed randomly
+    # For adaptive trials, balance pre/post
+    n_adaptive_pre = nAdaptive // 2
+    n_adaptive_post = nAdaptive - n_adaptive_pre
+    
+    remaining_trials = []
+    remaining_trials.extend([('adaptive', 'pre', 'adaptive')] * n_adaptive_pre)
+    remaining_trials.extend([('adaptive', 'post', 'adaptive')] * n_adaptive_post)
+    for offset_val in FIXED_OFFSETS_REL:
+        remaining_trials.append((offset - offset_val, 'pre', 'fixed'))
+        remaining_trials.append((offset + offset_val, 'post', 'fixed'))
+    random.shuffle(remaining_trials)
+    
+    trial_sequence.extend(remaining_trials)
+else:
+    # All trials are adaptive with block randomization
+    block_dim = 10
+    trial_order = []
+    for block in range(int(nTrials) // block_dim):
+        block_trials = ['pre'] * int(block_dim/2) + ['post'] * int(block_dim/2)
+        np.random.shuffle(block_trials)
+        trial_order.extend(block_trials)
+    
+    # Handle remaining trials
+    remaining = int(nTrials) % block_dim
+    if remaining > 0:
+        remaining_trials = ['pre'] * min(int(block_dim/2), remaining) + ['post'] * max(0, remaining - int(block_dim/2))
+        np.random.shuffle(remaining_trials)
+        trial_order.extend(remaining_trials)
+    
+    trial_sequence = [('adaptive', trial_order[i], 'adaptive') for i in range(nTrials)]
 
 stimuli_ms = []
 successes = []
 models_used = []
 user_responses = []
 
-for i in range(nTrials):
-    # Select model based on randomized trial order
-    use_pre = (trial_order[i] == 'pre')
+for i, (stim_info, pre_post, trial_type) in enumerate(trial_sequence):
+    # Select model based on pre/post
+    use_pre = (pre_post == 'pre')
     exp = exp_pre if use_pre else exp_post
     model_name = 'pre' if use_pre else 'post'
     
-    # Get magnitude from ADOpy
-    magnitude = round(exp.get(), 1)
-    
-    # Convert magnitude to absolute stimulus time
-    if use_pre:
-        stim_ms = offset - magnitude
+    if trial_type == 'fixed':
+        stim_ms = stim_info
+        magnitude = abs(stim_ms - offset)
+        print(f"\n--- TRIAL {i + 1}/{nTrials} [FIXED-{pre_post.upper()}] ---")
     else:
-        stim_ms = offset + magnitude
-    stim_ms = round(stim_ms, 1)
-
-    print(f"\n--- TRIAL {i + 1}/{nTrials} ---")
+        # Get magnitude from ADOpy
+        magnitude = round(exp.get(), 1)
+        
+        # Convert magnitude to absolute stimulus time
+        if use_pre:
+            stim_ms = offset - magnitude
+        else:
+            stim_ms = offset + magnitude
+        stim_ms = round(stim_ms, 1)
+        print(f"\n--- TRIAL {i + 1}/{nTrials} [ADAPTIVE-{pre_post.upper()}] ---")
+    
     print(f"Model: {model_name}, Stimulus: {stim_ms:.1f} ms (magnitude: {magnitude:.1f})")
     
     while True:

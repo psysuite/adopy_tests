@@ -11,6 +11,7 @@ import os
 import sys
 import numpy as np
 import pandas as pd
+import random
 
 from utilities.misc_generate_responses import generate_response, get_sigma_from_jnd
 from utilities.plotting import plot_group_histograms, plot_group_psychometric
@@ -19,6 +20,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from bisection import BISRelADOpyWrapper as qw
 from utilities.psychometric_analysis import safe_analyze_subject, consolidate_results, print_summary_report
 from utilities.logging_config import setup_logger
+
+
+# Configuration
+USE_FIXED_TRIALS = True  # Set to False to use only adaptive trials
+
+# Fixed trial parameters
+N_FIXED = 10  # Fixed trials (repeated twice: once at start, once mixed) - 5 pre + 5 post each time
+FIXED_OFFSETS_REL = [25, 75, 125, 175, 225]  # Creates 10 latencies: 5 pre + 5 post
 
 
 def simulate_subject(subj_id, pse, jnd, ntrials, output_dir, file_prefix, logger):
@@ -35,31 +44,62 @@ def simulate_subject(subj_id, pse, jnd, ntrials, output_dir, file_prefix, logger
     ado_params = {"guess_rate": 0.5, "lapse_rate": 0.04, "noise_perc": 0.1}
     bis_params = {"min": 5, "max": 300, "offset": offset, "ntrials": ntrials, "is_absolute": False}
     exp = qw.BISRelADOpyWrapper(ado_params, bis_params)
-    
-    # Create trial order: randomize pre/post in blocks of 8
-    trial_order = []
-    for block in range(int(ntrials) // 8):
-        block_trials = ['pre'] * 4 + ['post'] * 4
-        np.random.shuffle(block_trials)
-        trial_order.extend(block_trials)
-    
-    # Handle remaining trials
-    remaining = int(ntrials) % 8
-    if remaining > 0:
-        remaining_trials = ['pre'] * min(4, remaining) + ['post'] * max(0, remaining - 4)
-        np.random.shuffle(remaining_trials)
-        trial_order.extend(remaining_trials)
-    
+
     # Collect trial data for group plots
     rows = []
     
-    # Generate trials
-    for trial_id in range(ntrials):
-        # Select pre/post based on randomized trial order
-        is_pre = (trial_order[trial_id] == 'pre')
+    # Create trial sequence
+    if USE_FIXED_TRIALS:
+        n_adaptive = ntrials - (2 * N_FIXED)
         
-        stim_q = exp.get(is_pre)
-        stim_ms = offset - stim_q if is_pre is True else offset + stim_q
+        # First 10 trials: 5 pre + 5 post in order
+        trial_sequence = []
+        for offset_val in FIXED_OFFSETS_REL:
+            trial_sequence.append((offset - offset_val, 'pre', 'fixed'))  # pre
+            trial_sequence.append((offset + offset_val, 'post', 'fixed'))  # post
+        
+        # Remaining trials: adaptive + 10 fixed (5 pre + 5 post) mixed randomly
+        # For adaptive trials, balance pre/post
+        n_adaptive_pre = n_adaptive // 2
+        n_adaptive_post = n_adaptive - n_adaptive_pre
+        
+        remaining_trials = []
+        remaining_trials.extend([('adaptive', 'pre', 'adaptive')] * n_adaptive_pre)
+        remaining_trials.extend([('adaptive', 'post', 'adaptive')] * n_adaptive_post)
+        for offset_val in FIXED_OFFSETS_REL:
+            remaining_trials.append((offset - offset_val, 'pre', 'fixed'))
+            remaining_trials.append((offset + offset_val, 'post', 'fixed'))
+        random.shuffle(remaining_trials)
+        
+        trial_sequence.extend(remaining_trials)
+    else:
+        # All trials are adaptive with block randomization
+        block_dim = 10
+        trial_order = []
+        for block in range(int(ntrials) // block_dim):
+            block_trials = ['pre'] * int(block_dim/2) + ['post'] * int(block_dim/2)
+            np.random.shuffle(block_trials)
+            trial_order.extend(block_trials)
+        
+        # Handle remaining trials
+        remaining = int(ntrials) % block_dim
+        if remaining > 0:
+            remaining_trials = ['pre'] * min(int(block_dim/2), remaining) + ['post'] * max(0, remaining - int(block_dim/2))
+            np.random.shuffle(remaining_trials)
+            trial_order.extend(remaining_trials)
+        
+        trial_sequence = [('adaptive', trial_order[i], 'adaptive') for i in range(ntrials)]
+    
+    # Generate trials
+    for trial_id, (stim_info, pre_post, trial_type) in enumerate(trial_sequence):
+        is_pre = (pre_post == 'pre')
+        
+        if trial_type == 'fixed':
+            stim_ms = stim_info
+            stim_q = abs(stim_ms - offset)
+        else:
+            stim_q = exp.get(is_pre)
+            stim_ms = offset - stim_q if is_pre else offset + stim_q
         
         # Generate response using psychophysical model
         user_ans = generate_response(stim_ms, pse, sigma)
