@@ -6,7 +6,7 @@ import numpy as np
 from bisection.BISADOpyWrapper import BISADOpyWrapper
 
 
-# manage absolute latencies (e.g. 150-850 ms)
+# manage absolute latencies (e.g. 200-800 ms)
 # can use model-derived and externally-defined latencies
 # optionally: try (10 times) to avoid presenting stimuli within an exclusion_width large window
 class BISAbsADOpyWrapper(BISADOpyWrapper):
@@ -25,7 +25,7 @@ class BISAbsADOpyWrapper(BISADOpyWrapper):
     """
     def get(self, addNoise=True, exclude_zone=False):
 
-        model = self.engine.get_design("optimal")
+        model   = self.engine.get_design("optimal")
         stim_ms = model["stimulus"]
 
         if addNoise:
@@ -42,34 +42,21 @@ class BISAbsADOpyWrapper(BISADOpyWrapper):
         else:
             self.pre_offset_nstim += 1
 
-        model["stimulus"] = stim_ms
-
-        self.stimuli_ms.append(stim_ms)
-        self.model_stim.append(model)
-
         return stim_ms
 
     # accept 0/1 response
     # The 2AFC model will learn P(response=1) as a function of stimulus
     # This should be monotonically increasing, with threshold at offset
-    def set(self, response, q_value=None, index=-1):
+    def set(self, response, stim_ms, index=-1):
 
         if response not in (0, 1):
             print("WARNING, response value not valid")
             return
 
-        # if q_value is given, crete a new model_stim
-        if q_value is not None:
-            model = {"stimulus": q_value}
-            self.model_stim.append(model)
-            index = -1  # Use the last element just added
-        else:
-            # if q_value is not given, model_stim cannot be empty
-            if len(self.model_stim) == 0:
-                print("ERROR: No stimulus model available. Call get_rel() first or provide q_value.")
-                raise Exception("ERROR: No stimulus model available. Call get_rel() first or provide q_value.")
+        self.stimuli_ms.append(stim_ms)
+        model = {"stimulus": stim_ms}
+        self.model_stim.append(model)
 
-        model = self.model_stim[index]
         self.engine.update(model, response)
 
         # Calculate success based on stimulus position relative to offset

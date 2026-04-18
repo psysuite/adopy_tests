@@ -2,7 +2,7 @@ from bisection import BISRelADOpyWrapper as qw
 import numpy as np
 
 offset      = 500
-nTrials     = 56
+nTrials     = 50
 
 ado_params  = {"guess_rate":0.5, "lapse_rate":0.04, "noise_perc":0.1}
 bis_params  = {"min":5, "max": 300, "offset":offset, "ntrials":nTrials, "is_absolute":False}
@@ -20,17 +20,18 @@ print(f"Threshold range: [{exp.params['threshold'][0]}, {exp.params['threshold']
 print(f"Total trials: {nTrials}")
 print("="*60)
 
-# Create trial order: every 8 trials, randomize 4 pre and 4 post
+block_dim = 10
+# Create trial order: every 10 trials, randomize 5 pre and 5 post
 trial_order = []
-for block in range(int(nTrials) // 8):
-    block_trials = ['pre'] * 4 + ['post'] * 4
+for block in range(int(nTrials) // block_dim):
+    block_trials = ['pre'] * int(block_dim/2) + ['post'] * int(block_dim/2)
     np.random.shuffle(block_trials)
     trial_order.extend(block_trials)
 
 # Handle remaining trials if nTrials is not divisible by 8
-remaining = int(nTrials) % 8
+remaining = int(nTrials) % block_dim
 if remaining > 0:
-    remaining_trials = ['pre'] * min(4, remaining) + ['post'] * max(0, remaining - 4)
+    remaining_trials = ['pre'] * min(int(block_dim/2), remaining) + ['post'] * max(0, remaining - int(block_dim/2))
     np.random.shuffle(remaining_trials)
     trial_order.extend(remaining_trials)
 

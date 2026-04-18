@@ -11,6 +11,7 @@ import os
 import sys
 import numpy as np
 import pandas as pd
+import random
 
 from utilities.misc_generate_responses import generate_response, get_sigma_from_jnd
 from utilities.plotting import plot_group_histograms, plot_group_psychometric
@@ -19,6 +20,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from bisection import BISAbsADOpyWrapper as qw
 from utilities.psychometric_analysis import safe_analyze_subject, consolidate_results, print_summary_report
 from utilities.logging_config import setup_logger
+
+
+# Configuration
+USE_FIXED_TRIALS = True  # Set to False to use only adaptive trials
+
+# Fixed trial parameters
+N_FIXED = 10  # Fixed trials (repeated twice: once at start, once mixed)
+FIXED_LATENCIES = [275, 725, 325, 675, 375, 625, 425, 575, 475, 525]
 
 
 def simulate_subject(subj_id, pse, jnd, ntrials, output_dir, file_prefix, logger):
@@ -32,17 +41,38 @@ def simulate_subject(subj_id, pse, jnd, ntrials, output_dir, file_prefix, logger
     # Initialize ADOpy wrapper
     offset = 500
 
-    ado_params = {"guess_rate": 0.04, "lapse_rate": 0.04, "noise_perc": 0.1}
+    ado_params = {"guess_rate": 0.04, "lapse_rate": 0.04, "noise_perc": 0.05}
     bis_params = {"min": 200, "max": 800, "offset": offset, "ntrials": ntrials}
     exp = qw.BISAbsADOpyWrapper(adoparams=ado_params, taskparams=bis_params)
     
     # Collect trial data for group plots
     rows = []
     
+    # Create trial sequence
+    if USE_FIXED_TRIALS:
+        n_adaptive = ntrials - (2 * N_FIXED)
+        
+        # First N_FIXED trials: fixed in order
+        trial_sequence = [(lat, 'fixed') for lat in FIXED_LATENCIES[:N_FIXED]]
+        
+        # Remaining trials: adaptive + fixed mixed randomly
+        remaining_trials = []
+        remaining_trials.extend([('adaptive', 'adaptive')] * n_adaptive)
+        remaining_trials.extend([(lat, 'fixed') for lat in FIXED_LATENCIES[:N_FIXED]])
+        random.shuffle(remaining_trials)
+        
+        trial_sequence.extend(remaining_trials)
+    else:
+        # All trials are adaptive
+        trial_sequence = [('adaptive', 'adaptive')] * ntrials
+    
     # Generate trials
-    for trial_id in range(ntrials):
-        # Get stimulus from ADOpy
-        stim_ms = exp.get()
+    for trial_id, (trial_info, trial_type) in enumerate(trial_sequence):
+        # Get stimulus
+        if trial_type == 'fixed':
+            stim_ms = trial_info
+        else:
+            stim_ms = exp.get()
         
         # Generate response using psychophysical model
         user_ans = generate_response(stim_ms, pse, sigma)

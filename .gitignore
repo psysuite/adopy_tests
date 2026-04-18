@@ -4,3 +4,28 @@
 /.qodo
 /.vscode
 /.idea
+
+# Build and test artifacts
+/build/
+/dist/
+
+# Test output files
+/tests/output/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Pytest cache
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+*.swp
+*.swo
+*~
