@@ -9,7 +9,7 @@ import os
 import io
 import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
 import pandas as pd
 import numpy as np
 import logging
@@ -553,3 +553,33 @@ def print_summary_report(results_list: list) -> None:
     print(f"Failed analyses: {failed_analyses}")
     print(f"Success rate: {success_rate:.2f}%")
     print("========================================")
+
+
+def add_group_stats_to_excel(excel_filepath: str, skip_cols: List[str] = None) -> None:
+    """
+    Append GROUP_mean and GROUP_std rows to an existing results Excel file.
+
+    Args:
+        excel_filepath: Full path to the Excel file produced by consolidate_results()
+        skip_cols: Column names to exclude from statistics (default: subj, status)
+    """
+    if skip_cols is None:
+        skip_cols = ['subj', 'status']
+
+    df = pd.read_excel(excel_filepath)
+
+    group_mean = {'subj': 'GROUP_mean'}
+    group_std  = {'subj': 'GROUP_std'}
+
+    for col in df.columns:
+        if col in skip_cols:
+            continue
+        try:
+            group_mean[col] = df[col].mean()
+            group_std[col]  = df[col].std()
+        except Exception:
+            group_mean[col] = None
+            group_std[col]  = None
+
+    df_combined = pd.concat([df, pd.DataFrame([group_mean, group_std])], ignore_index=True)
+    df_combined.to_excel(excel_filepath, index=False, sheet_name='Results')

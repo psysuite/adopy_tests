@@ -1,5 +1,6 @@
-from bisection import BISAbsADOpyWrapper as qw
+from bisection import BISRelADOpyWrapper as qw
 from utilities.real_exp_accessories import run_bisection_trial
+from utilities.trial_sequence import create_trial_sequence_relative
 import numpy as np
 import random
 
@@ -20,56 +21,19 @@ nAdaptive = 36  # Adaptive trials (used only if USE_FIXED_TRIALS=True)
 nFixed = 10  # Fixed trials (repeated twice: once at start, once mixed) - 5 pre + 5 post each time
 
 # Fixed relative offsets (5 values, will be applied as ±offset)
-FIXED_OFFSETS_REL = [25, 75, 125, 175, 225]  # Creates 10 latencies: 5 pre + 5 post
+FIXED_OFFSETS_REL = [225, 175, 125, 75, 25]  # Creates 10 latencies: 5 pre + 5 post
 
 # Initialize two models: pre and post
 ado_params_pre = {"guess_rate": 0.5, "lapse_rate": 0.04, "noise_perc": 0.1}
 bis_params_pre = {"min": 0, "max": 300, "offset": offset, "ntrials": int(nTrials / 2)}
-exp_pre = qw.BISAbsADOpyWrapper(adoparams=ado_params_pre, taskparams=bis_params_pre)
+exp_pre = qw.BISRelADOpyWrapper(adoparams=ado_params_pre, taskparams=bis_params_pre)
 
 ado_params_post = {"guess_rate": 0.5, "lapse_rate": 0.04, "noise_perc": 0.1}
 bis_params_post = {"min": 0, "max": 300, "offset": offset, "ntrials": int(nTrials / 2)}
-exp_post = qw.BISAbsADOpyWrapper(adoparams=ado_params_post, taskparams=bis_params_post)
+exp_post = qw.BISRelADOpyWrapper(adoparams=ado_params_post, taskparams=bis_params_post)
 
 # Create trial sequence
-if USE_FIXED_TRIALS:
-    # First 10 trials: 5 pre + 5 post in order
-    trial_sequence = []
-    for offset_val in FIXED_OFFSETS_REL:
-        trial_sequence.append((offset - offset_val, 'pre', 'fixed'))  # pre
-        trial_sequence.append((offset + offset_val, 'post', 'fixed'))  # post
-    
-    # Remaining trials: adaptive + 10 fixed (5 pre + 5 post) mixed randomly
-    # For adaptive trials, balance pre/post
-    n_adaptive_pre = nAdaptive // 2
-    n_adaptive_post = nAdaptive - n_adaptive_pre
-    
-    remaining_trials = []
-    remaining_trials.extend([('adaptive', 'pre', 'adaptive')] * n_adaptive_pre)
-    remaining_trials.extend([('adaptive', 'post', 'adaptive')] * n_adaptive_post)
-    for offset_val in FIXED_OFFSETS_REL:
-        remaining_trials.append((offset - offset_val, 'pre', 'fixed'))
-        remaining_trials.append((offset + offset_val, 'post', 'fixed'))
-    random.shuffle(remaining_trials)
-    
-    trial_sequence.extend(remaining_trials)
-else:
-    # All trials are adaptive with block randomization
-    block_dim = 10
-    trial_order = []
-    for block in range(int(nTrials) // block_dim):
-        block_trials = ['pre'] * int(block_dim/2) + ['post'] * int(block_dim/2)
-        np.random.shuffle(block_trials)
-        trial_order.extend(block_trials)
-    
-    # Handle remaining trials
-    remaining = int(nTrials) % block_dim
-    if remaining > 0:
-        remaining_trials = ['pre'] * min(int(block_dim/2), remaining) + ['post'] * max(0, remaining - int(block_dim/2))
-        np.random.shuffle(remaining_trials)
-        trial_order.extend(remaining_trials)
-    
-    trial_sequence = [('adaptive', trial_order[i], 'adaptive') for i in range(nTrials)]
+trial_sequence = create_trial_sequence_relative(nTrials, FIXED_OFFSETS_REL, offset, nFixed, USE_FIXED_TRIALS)
 
 stimuli_ms = []
 successes = []
@@ -126,13 +90,13 @@ for i, (stim_info, pre_post, trial_type) in enumerate(trial_sequence):
     user_responses.append(user_ans)
     
     # Update ADOpy with success
-    exp.set(success, q_value=magnitude)
-    
+    exp.set(success, user_ans, magnitude, onset_ms)
+
     result = "CORRECT" if success else "INCORRECT"
     print(f"Response: {user_ans}, Result: {result}")
 
 # Combine all trial data into a single wrapper for unified fit
-exp_combined = qw.BISAbsADOpyWrapper(adoparams=ado_params_pre, taskparams=bis_params_pre)
+exp_combined = qw.BISRelADOpyWrapper(adoparams=ado_params_pre, taskparams=bis_params_pre)
 exp_combined.stimuli_ms = stimuli_ms
 exp_combined.responses = user_responses
 exp_combined.offset = offset

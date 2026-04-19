@@ -1,5 +1,6 @@
 from bisection import BISRelADOpyWrapper as qw
 from utilities.real_exp_accessories import run_bisection_trial
+from utilities.trial_sequence import create_trial_sequence_relative
 import numpy as np
 import random
 
@@ -47,44 +48,7 @@ print(f"Tone duration: {TONE_DURATION} ms")
 print("=" * 60)
 
 # Create trial sequence
-if USE_FIXED_TRIALS:
-    # First 10 trials: 5 pre + 5 post in order
-    trial_sequence = []
-    for offset_val in FIXED_OFFSETS_REL:
-        trial_sequence.append((offset - offset_val, 'pre', 'fixed'))  # pre
-        trial_sequence.append((offset + offset_val, 'post', 'fixed'))  # post
-    
-    # Remaining trials: adaptive + 10 fixed (5 pre + 5 post) mixed randomly
-    # For adaptive trials, we need to balance pre/post
-    n_adaptive_pre = nAdaptive // 2
-    n_adaptive_post = nAdaptive - n_adaptive_pre
-    
-    remaining_trials = []
-    remaining_trials.extend([('adaptive', 'pre', 'adaptive')] * n_adaptive_pre)
-    remaining_trials.extend([('adaptive', 'post', 'adaptive')] * n_adaptive_post)
-    for offset_val in FIXED_OFFSETS_REL:
-        remaining_trials.append((offset - offset_val, 'pre', 'fixed'))
-        remaining_trials.append((offset + offset_val, 'post', 'fixed'))
-    random.shuffle(remaining_trials)
-    
-    trial_sequence.extend(remaining_trials)
-else:
-    # All trials are adaptive with block randomization
-    block_dim = 10
-    trial_order = []
-    for block in range(int(nTrials) // block_dim):
-        block_trials = ['pre'] * int(block_dim/2) + ['post'] * int(block_dim/2)
-        np.random.shuffle(block_trials)
-        trial_order.extend(block_trials)
-    
-    # Handle remaining trials
-    remaining = int(nTrials) % block_dim
-    if remaining > 0:
-        remaining_trials = ['pre'] * min(int(block_dim/2), remaining) + ['post'] * max(0, remaining - int(block_dim/2))
-        np.random.shuffle(remaining_trials)
-        trial_order.extend(remaining_trials)
-    
-    trial_sequence = [('adaptive', trial_order[i], 'adaptive') for i in range(nTrials)]
+trial_sequence = create_trial_sequence_relative(nTrials, FIXED_OFFSETS_REL, offset, nFixed, USE_FIXED_TRIALS)
 
 for i, (stim_info, pre_post, trial_type) in enumerate(trial_sequence):
     is_pre = (pre_post == 'pre')
@@ -104,7 +68,7 @@ for i, (stim_info, pre_post, trial_type) in enumerate(trial_sequence):
     user_ans = run_bisection_trial(stim_ms, TONE_DURATION, TOTAL_DURATION, SAMPLE_RATE, TONE_FREQUENCY)
 
     success = int(user_ans == int(stim_ms > offset))
-    exp.set(success, user_ans, q_value=stim_q)
+    exp.set(success, user_ans, stim_q, stim_ms)
     
     result = "CORRECT" if success else "INCORRECT"
     print(f"Response recorded: {user_ans}, Result: {result}")

@@ -15,10 +15,11 @@ import random
 
 from utilities.misc_generate_responses import generate_response, get_sigma_from_jnd
 from utilities.plotting import plot_group_histograms, plot_group_psychometric
+from utilities.trial_sequence import create_trial_sequence_absolute
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from bisection import BISAbsADOpyWrapper as qw
-from utilities.psychometric_analysis import safe_analyze_subject, consolidate_results, print_summary_report
+from utilities.psychometric_analysis import safe_analyze_subject, consolidate_results, print_summary_report, add_group_stats_to_excel
 from utilities.logging_config import setup_logger
 
 
@@ -49,22 +50,9 @@ def simulate_subject(subj_id, pse, jnd, ntrials, output_dir, file_prefix, logger
     rows = []
     
     # Create trial sequence
-    if USE_FIXED_TRIALS:
-        n_adaptive = ntrials - (2 * N_FIXED)
-        
-        # First N_FIXED trials: fixed in order
-        trial_sequence = [(lat, 'fixed') for lat in FIXED_LATENCIES[:N_FIXED]]
-        
-        # Remaining trials: adaptive + fixed mixed randomly
-        remaining_trials = []
-        remaining_trials.extend([('adaptive', 'adaptive')] * n_adaptive)
-        remaining_trials.extend([(lat, 'fixed') for lat in FIXED_LATENCIES[:N_FIXED]])
-        random.shuffle(remaining_trials)
-        
-        trial_sequence.extend(remaining_trials)
-    else:
-        # All trials are adaptive
-        trial_sequence = [('adaptive', 'adaptive')] * ntrials
+    trial_sequence = create_trial_sequence_absolute(
+        ntrials, FIXED_LATENCIES, N_FIXED, USE_FIXED_TRIALS
+    )
     
     # Generate trials
     for trial_id, (trial_info, trial_type) in enumerate(trial_sequence):
@@ -157,37 +145,8 @@ def main():
     # Consolidate results
     if all_results:
         try:
-            consolidate_results(all_results, output_dir, file_prefix)
-            
-            # Add group statistics
-            excel_filename = f"{file_prefix}_results_summary.xlsx"
-            excel_filepath = os.path.join(output_dir, excel_filename)
-            
-            # Read the existing Excel file
-            df_results = pd.read_excel(excel_filepath)
-            
-            # Create statistics rows
-            stats_rows = []
-            
-            group_mean = {'subj': 'GROUP_mean'}
-            group_std = {'subj': 'GROUP_std'}
-            for col in df_results.columns:
-                if col not in ['subj', 'modality', 'gender', 'label', 'status']:
-                    try:
-                        group_mean[col] = df_results[col].mean()
-                        group_std[col] = df_results[col].std()
-                    except:
-                        group_mean[col] = None
-                        group_std[col] = None
-            stats_rows.append(group_mean)
-            stats_rows.append(group_std)
-            
-            # Append statistics to dataframe
-            df_stats = pd.DataFrame(stats_rows)
-            df_combined = pd.concat([df_results, df_stats], ignore_index=True)
-            
-            # Save updated Excel
-            df_combined.to_excel(excel_filepath, index=False, sheet_name='Results')
+            excel_filepath = consolidate_results(all_results, output_dir, file_prefix)
+            add_group_stats_to_excel(excel_filepath)
             print(f"\nResults saved to: {excel_filepath}")
         except Exception as e:
             print(f"Error consolidating results: {e}")

@@ -1,5 +1,6 @@
 from bisection import BISAbsADOpyWrapper as qw
 from utilities.real_exp_accessories import run_bisection_trial
+from utilities.trial_sequence import create_trial_sequence_absolute
 import random
 
 
@@ -47,20 +48,7 @@ else:
 print("=" * 60)
 
 # Create trial sequence
-if USE_FIXED_TRIALS:
-    # First 10 trials: fixed in order
-    trial_sequence = [(lat, 'fixed') for lat in FIXED_LATENCIES[:nFixed]]
-
-    # Remaining trials: adaptive + fixed mixed randomly
-    remaining_trials = []
-    remaining_trials.extend([('adaptive', 'adaptive')] * nAdaptive)
-    remaining_trials.extend([(lat, 'fixed') for lat in FIXED_LATENCIES[:nFixed]])
-    random.shuffle(remaining_trials)
-
-    trial_sequence.extend(remaining_trials)
-else:
-    # All trials are adaptive
-    trial_sequence = [('adaptive', 'adaptive')] * nTrials
+trial_sequence = create_trial_sequence_absolute(nTrials, FIXED_LATENCIES, nFixed, USE_FIXED_TRIALS)
 
 # Run trials
 for i, (trial_info, trial_type) in enumerate(trial_sequence):

@@ -47,26 +47,26 @@ class BISAbsADOpyWrapper(BISADOpyWrapper):
     # accept 0/1 response
     # The 2AFC model will learn P(response=1) as a function of stimulus
     # This should be monotonically increasing, with threshold at offset
-    def set(self, response, stim_ms, index=-1):
+    def set(self, response, stim_ms):
 
         if response not in (0, 1):
             print("WARNING, response value not valid")
             return
 
-        self.stimuli_ms.append(stim_ms)
         model = {"stimulus": stim_ms}
-        self.model_stim.append(model)
-
-        self.engine.update(model, response)
 
         # Calculate success based on stimulus position relative to offset
-        if (self.stimuli_ms[-1] > self.offset and response == 1) or (self.stimuli_ms[-1] < self.offset and response == 0):
+        if (stim_ms > self.offset and response == 1) or (stim_ms < self.offset and response == 0):
             success = 1
         else:
             success = 0
 
+        self.model_stim.append(model)
+        self.stimuli_ms.append(stim_ms)
         self.responses.append(response)
         self.successes.append(success)
+
+        self.engine.update(model, response)
 
     # manage exclusion zone
     def apply_exclusion_window(self, stim, max_attempts = 10, multiplier=2):

@@ -1,4 +1,5 @@
 from bisection import BISAbsADOpyWrapper as qw
+from utilities.trial_sequence import create_trial_sequence_absolute
 import random
 
 
@@ -39,38 +40,7 @@ else:
 print("="*60)
 
 # Create trial sequence
-if USE_FIXED_TRIALS and USE_REL_LOGIC:
-    # Rel-style logic: 10 fixed trials (5 pre + 5 post) at start, then adaptive, then 10 fixed mixed
-    # First 10 trials: 5 pre + 5 post in order
-    trial_sequence = []
-    for offset_val in FIXED_OFFSETS_REL:
-        trial_sequence.append((offset - offset_val, 'fixed_pre'))  # pre
-        trial_sequence.append((offset + offset_val, 'fixed_post'))  # post
-    
-    # Remaining trials: adaptive + 10 fixed (5 pre + 5 post) mixed randomly
-    remaining_trials = []
-    remaining_trials.extend([('adaptive', 'adaptive')] * nAdaptive)
-    for offset_val in FIXED_OFFSETS_REL:
-        remaining_trials.append((offset - offset_val, 'fixed_pre'))
-        remaining_trials.append((offset + offset_val, 'fixed_post'))
-    random.shuffle(remaining_trials)
-    
-    trial_sequence.extend(remaining_trials)
-    
-elif USE_FIXED_TRIALS:
-    # Original abs logic: 10 fixed trials at start, then adaptive + 10 fixed mixed
-    trial_sequence = [(lat, 'fixed') for lat in FIXED_LATENCIES_ABS[:nFixed]]
-
-    # Remaining trials: adaptive + fixed mixed randomly
-    remaining_trials = []
-    remaining_trials.extend([('adaptive', 'adaptive')] * nAdaptive)
-    remaining_trials.extend([(lat, 'fixed') for lat in FIXED_LATENCIES_ABS[:nFixed]])
-    random.shuffle(remaining_trials)
-
-    trial_sequence.extend(remaining_trials)
-else:
-    # All trials are adaptive
-    trial_sequence = [('adaptive', 'adaptive')] * nTrials
+trial_sequence = create_trial_sequence_absolute(nTrials, FIXED_LATENCIES_ABS, nFixed, USE_FIXED_TRIALS)
 
 # Run trials
 for i, (trial_info, trial_type) in enumerate(trial_sequence):

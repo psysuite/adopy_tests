@@ -1,4 +1,5 @@
 from bisection import BISRelADOpyWrapper as qw
+from utilities.trial_sequence import create_trial_sequence_relative
 import numpy as np
 
 offset      = 500
@@ -20,24 +21,10 @@ print(f"Threshold range: [{exp.params['threshold'][0]}, {exp.params['threshold']
 print(f"Total trials: {nTrials}")
 print("="*60)
 
-block_dim = 10
-# Create trial order: every 10 trials, randomize 5 pre and 5 post
-trial_order = []
-for block in range(int(nTrials) // block_dim):
-    block_trials = ['pre'] * int(block_dim/2) + ['post'] * int(block_dim/2)
-    np.random.shuffle(block_trials)
-    trial_order.extend(block_trials)
+trial_sequence = create_trial_sequence_relative(nTrials, [], offset, use_fixed_trials=False)
 
-# Handle remaining trials if nTrials is not divisible by 8
-remaining = int(nTrials) % block_dim
-if remaining > 0:
-    remaining_trials = ['pre'] * min(int(block_dim/2), remaining) + ['post'] * max(0, remaining - int(block_dim/2))
-    np.random.shuffle(remaining_trials)
-    trial_order.extend(remaining_trials)
-
-for i in range(nTrials):
-    # Select pre/post based on randomized trial order
-    is_pre = (trial_order[i] == 'pre')
+for i, (stim_info, pre_post, trial_type) in enumerate(trial_sequence):
+    is_pre = (pre_post == 'pre')
     
     stim_q = exp.get(is_pre)
     stim_ms = offset - stim_q if is_pre is True else offset + stim_q
@@ -55,7 +42,7 @@ for i in range(nTrials):
             print("Invalid input. Please enter 1 or 2.")
 
     success = int(user_ans == int(stim_ms > offset))
-    exp.set(success, user_ans, q_value=stim_q)
+    exp.set(success, user_ans, stim_q, stim_ms)
     
     result = "CORRECT" if success else "INCORRECT"
     print(f"Response recorded: {user_ans}, Result: {result}")
