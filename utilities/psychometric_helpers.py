@@ -6,7 +6,6 @@ Reusable across simulation, postprocessing, and validation contexts.
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Dict
 import numpy as np
-from scipy.optimize import curve_fit
 
 
 # ============================================================================
@@ -103,35 +102,52 @@ def calculate_stability_from_values(
 def fit_logistic_psychometric(
     latencies: np.ndarray,
     responses: np.ndarray,
-    bounds: Tuple = ([200, 1], [800, 200]),
     fallback: bool = True
 ) -> Tuple[float, float]:
     """
-    Fit a logistic psychometric function and return (PSE, JND).
+    Fit a logistic psychometric function via GLM (binomial/logit) and return (PSE, JND).
 
-    P(long) = 1 / (1 + exp(-(x - PSE) / slope))
-    JND = 1.35 * slope
+    Uses statsmodels GLM with binomial family and logit link:
+      logit(P) = b0 + b1 * x
+      PSE = -b0 / b1
+      JND = 1.35 / |b1|
 
     Args:
         latencies: Stimulus values
         responses: Binary responses (0/1)
-        bounds: ([pse_min, slope_min], [pse_max, slope_max])
         fallback: If True, return (median, std) on failure instead of raising
 
     Returns:
         Tuple of (PSE, JND)
     """
-    def logistic(x, pse, slope):
-        return 1.0 / (1.0 + np.exp(-(x - pse) / slope))
+    import warnings
+    import statsmodels.api as sm
+    from scipy.optimize import minimize
 
     try:
-        p0 = [np.median(latencies), 50.0]
-        popt, _ = curve_fit(logistic, latencies, responses, p0=p0,
-                            maxfev=10000, bounds=bounds)
-        pse = popt[0]
-        jnd = 1.35 * abs(popt[1])
-        return pse, jnd
+        X = sm.add_constant(latencies)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            model = sm.GLM(responses, X, family=sm.families.Binomial())
+            result = model.fit()
+        b0, b1 = result.params
+        if abs(b1) < 1e-10:
+            raise ValueError("Slope too close to zero")
+        return float(-b0 / b1), float(1.35 / abs(b1))
     except Exception:
+        # Fallback: MLE via Nelder-Mead
+        try:
+            def neg_log_likelihood(params):
+                b0, b1 = params
+                p = np.clip(1.0 / (1.0 + np.exp(-(b0 + b1 * latencies))), 1e-10, 1 - 1e-10)
+                return -np.sum(responses * np.log(p) + (1 - responses) * np.log(1 - p))
+            res = minimize(neg_log_likelihood, [0.0, 0.01], method='Nelder-Mead')
+            if res.success:
+                b0, b1 = res.x
+                if abs(b1) > 1e-10:
+                    return float(-b0 / b1), float(1.35 / abs(b1))
+        except Exception:
+            pass
         if fallback:
             return float(np.median(latencies)), float(np.std(latencies))
         raise

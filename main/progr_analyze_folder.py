@@ -14,7 +14,7 @@ from utilities.validation_analyzer import ValidationAnalyzer
 from utilities.psychometric_helpers import calculate_stability_from_values
 
 # ============================================================================
-INPUT_FOLDER = "/data/CODE/python/adopy_tests/data/input"
+INPUT_FOLDER = "/data/CODE/python/adopy_tests/data/input/expdata"
 STABILITY_THRESHOLD = 0.10
 # ============================================================================
 
