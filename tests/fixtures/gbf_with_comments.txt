@@ -1,0 +1,8 @@
+# This is a comment
+@ 0.5
+* Another comment
+300 1 0
+# More comments
+400 1 0
+500 1 1
+600 1 1

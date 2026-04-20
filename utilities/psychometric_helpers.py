@@ -48,9 +48,9 @@ class ValidationResult:
     jnd_simulated: float
     jnd_diff_pct: float
     blocks: List[int] = field(default_factory=list)
-    pse_original_evolution: List[float] = field(default_factory=list)
+    pse_original_evolution: List[float]  = field(default_factory=list)
     pse_simulated_evolution: List[float] = field(default_factory=list)
-    jnd_original_evolution: List[float] = field(default_factory=list)
+    jnd_original_evolution: List[float]  = field(default_factory=list)
     jnd_simulated_evolution: List[float] = field(default_factory=list)
 
     def is_pse_similar(self, threshold: float = 10.0) -> bool:
@@ -59,9 +59,8 @@ class ValidationResult:
     def is_jnd_similar(self, threshold: float = 10.0) -> bool:
         return abs(self.jnd_diff_pct) <= threshold
 
-
 # ============================================================================
-# FUNCTIONS
+# ACCESSORY
 # ============================================================================
 
 def calculate_stability_from_values(
@@ -98,6 +97,79 @@ def calculate_stability_from_values(
 
     return 200
 
+
+def compare_progressive_params(
+    original: Dict[str, List[float]],
+    simulated: Dict[str, List[float]],
+    blocks: List[int] = None
+) -> Dict:
+    """
+    Compare PSE and JND between original and simulated progressive results.
+
+    Args:
+        original: dict with keys 'PSE' and 'JND' (lists)
+        simulated: dict with keys 'PSE' and 'JND' (lists)
+        blocks: block sizes used
+
+    Returns:
+        Dict with pse_original, pse_simulated, pse_diff_pct,
+              jnd_original, jnd_simulated, jnd_diff_pct,
+              and evolution lists.
+    """
+    pse_orig = original['PSE'][-1] if original['PSE'] else 0
+    pse_sim  = simulated['PSE'][-1] if simulated['PSE'] else 0
+    jnd_orig = original['JND'][-1] if original['JND'] else 0
+    jnd_sim  = simulated['JND'][-1] if simulated['JND'] else 0
+
+    pse_diff = 100 * (pse_sim - pse_orig) / pse_orig if pse_orig != 0 else 0
+    jnd_diff = 100 * (jnd_sim - jnd_orig) / jnd_orig if jnd_orig != 0 else 0
+
+    return {
+        'pse_original': pse_orig,
+        'pse_simulated': pse_sim,
+        'pse_diff_pct': pse_diff,
+        'jnd_original': jnd_orig,
+        'jnd_simulated': jnd_sim,
+        'jnd_diff_pct': jnd_diff,
+        'blocks': blocks,
+        'pse_original_evolution': original['PSE'],
+        'pse_simulated_evolution': simulated['PSE'],
+        'jnd_original_evolution': original['JND'],
+        'jnd_simulated_evolution': simulated['JND'],
+    }
+
+
+def calculate_latency_statistics(latencies: np.ndarray) -> Dict[str, float]:
+    """
+    Calculate descriptive statistics for stimulus latencies.
+
+    Args:
+        latencies: Array of stimulus presentation times (milliseconds)
+
+    Returns:
+        Dictionary with keys: mean, std, range, entropy (Shannon, 10 bins)
+    """
+    if len(latencies) == 0:
+        return {'mean': np.nan, 'std': np.nan, 'range': np.nan, 'entropy': np.nan}
+
+    mean = float(np.mean(latencies))
+    std = float(np.std(latencies, ddof=0))
+    lat_range = float(np.max(latencies) - np.min(latencies))
+
+    if len(latencies) > 1 and lat_range > 0:
+        counts, _ = np.histogram(latencies, bins=10)
+        probs = counts / counts.sum()
+        probs = probs[probs > 0]
+        entropy = float(-np.sum(probs * np.log2(probs)))
+    else:
+        entropy = 0.0
+
+    return {'mean': mean, 'std': std, 'range': lat_range, 'entropy': entropy}
+
+
+# ============================================================================
+# FITTERS
+# ============================================================================
 
 def fit_logistic_psychometric(
     latencies: np.ndarray,
@@ -153,42 +225,110 @@ def fit_logistic_psychometric(
         raise
 
 
-def compare_progressive_params(
-    original: Dict[str, List[float]],
-    simulated: Dict[str, List[float]],
-    blocks: List[int] = None
-) -> Dict:
+def fit_probit_psychometric(
+    latencies: np.ndarray,
+    responses: np.ndarray,
+    fallback: bool = True
+) -> Tuple[float, float]:
     """
-    Compare PSE and JND between original and simulated progressive results.
+    Fit a probit psychometric function via GLM (binomial/probit) and return (PSE, JND).
+
+    Uses statsmodels GLM with binomial family and probit link:
+      probit(P) = b0 + b1 * x
+      PSE = -b0 / b1
+      JND = 0.675 / |b1|
 
     Args:
-        original: dict with keys 'PSE' and 'JND' (lists)
-        simulated: dict with keys 'PSE' and 'JND' (lists)
-        blocks: block sizes used
+        latencies: Stimulus values
+        responses: Binary responses (0/1)
+        fallback: If True, return (median, std) on failure
 
     Returns:
-        Dict with pse_original, pse_simulated, pse_diff_pct,
-              jnd_original, jnd_simulated, jnd_diff_pct,
-              and evolution lists.
+        Tuple of (PSE, JND)
     """
-    pse_orig = original['PSE'][-1] if original['PSE'] else 0
-    pse_sim  = simulated['PSE'][-1] if simulated['PSE'] else 0
-    jnd_orig = original['JND'][-1] if original['JND'] else 0
-    jnd_sim  = simulated['JND'][-1] if simulated['JND'] else 0
+    import warnings
+    import statsmodels.api as sm
+    from scipy import stats as scipy_stats
 
-    pse_diff = 100 * (pse_sim - pse_orig) / pse_orig if pse_orig != 0 else 0
-    jnd_diff = 100 * (jnd_sim - jnd_orig) / jnd_orig if jnd_orig != 0 else 0
+    try:
+        X = sm.add_constant(latencies)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            model = sm.GLM(responses, X,
+                           family=sm.families.Binomial(
+                               link=sm.families.links.Probit()))
+            result = model.fit()
+        b0, b1 = result.params
+        if abs(b1) < 1e-10:
+            raise ValueError("Slope too close to zero")
+        return float(-b0 / b1), float(0.675 / abs(b1))
+    except Exception:
+        try:
+            def neg_log_likelihood(params):
+                b0, b1 = params
+                p = np.clip(scipy_stats.norm.cdf(b0 + b1 * latencies), 1e-10, 1 - 1e-10)
+                return -np.sum(responses * np.log(p) + (1 - responses) * np.log(1 - p))
+            from scipy.optimize import minimize
+            res = minimize(neg_log_likelihood, [0.0, 0.01], method='Nelder-Mead')
+            if res.success:
+                b0, b1 = res.x
+                if abs(b1) > 1e-10:
+                    return float(-b0 / b1), float(0.675 / abs(b1))
+        except Exception:
+            pass
+        if fallback:
+            return float(np.median(latencies)), float(np.std(latencies))
+        raise
 
-    return {
-        'pse_original': pse_orig,
-        'pse_simulated': pse_sim,
-        'pse_diff_pct': pse_diff,
-        'jnd_original': jnd_orig,
-        'jnd_simulated': jnd_sim,
-        'jnd_diff_pct': jnd_diff,
-        'blocks': blocks,
-        'pse_original_evolution': original['PSE'],
-        'pse_simulated_evolution': simulated['PSE'],
-        'jnd_original_evolution': original['JND'],
-        'jnd_simulated_evolution': simulated['JND'],
-    }
+
+def fit_gaussfit_psychometric(
+    latencies: np.ndarray,
+    responses: np.ndarray,
+    guess_rate: float
+) -> Tuple[float, float]:
+    """
+    Fit psychometric curve via grid search over cumulative Gaussian parameter space.
+
+    p(response=1) = guess_rate + (1 - guess_rate) * Φ((x - pse) / jnd)
+
+    Args:
+        latencies: Individual trial stimulus values
+        responses: Individual trial responses (0/1)
+        guess_rate: Guess rate parameter
+
+    Returns:
+        Tuple of (PSE, JND), or (nan, nan) if fitting fails
+    """
+    from scipy import stats as scipy_stats
+
+    if len(latencies) < 3:
+        return np.nan, np.nan
+    if len(np.unique(responses)) < 2:
+        return np.nan, np.nan
+    if len(np.unique(latencies)) < 3:
+        return np.nan, np.nan
+
+    lat_min, lat_max = np.min(latencies), np.max(latencies)
+    lat_range = lat_max - lat_min
+    if lat_range < 1e-10:
+        return np.nan, np.nan
+
+    pse_grid = np.linspace(lat_min, lat_max, 100)
+    jnd_grid = np.linspace(1.0, max(lat_range / 2, 1.0), 100)
+
+    best_pse, best_jnd = np.nan, np.nan
+    best_ll = -np.inf
+
+    for pse in pse_grid:
+        for jnd in jnd_grid:
+            p = np.clip(
+                guess_rate + (1 - guess_rate) * scipy_stats.norm.cdf((latencies - pse) / jnd),
+                1e-10, 1 - 1e-10
+            )
+            ll = np.sum(responses * np.log(p) + (1 - responses) * np.log(1 - p))
+            if ll > best_ll:
+                best_ll, best_pse, best_jnd = ll, pse, jnd
+
+    if np.isfinite(best_ll):
+        return float(best_pse), float(best_jnd)
+    return np.nan, np.nan

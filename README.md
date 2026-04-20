@@ -372,3 +372,33 @@ All files use:
 ---
 
 *Last updated: 2026-04-16*
+
+
+---
+
+## 📚 Additional Documentation
+
+For more detailed information, see the `docs/` folder:
+
+- **[Quick Start Guide](docs/QUICK_START.txt)** - Visual quick reference
+- **[Setup Complete](docs/SETUP_COMPLETE.md)** - Setup verification and next steps
+- **[Project Structure](docs/PROJECT_STRUCTURE.md)** - Complete project layout
+- **[Build Artifacts](docs/BUILD_ARTIFACTS.md)** - Understanding the `build/` folder
+- **[Test Summary](docs/TEST_SUMMARY.md)** - Test results and coverage report
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+make test
+
+# Run tests with coverage report
+make coverage
+
+# Clean build artifacts
+make clean
+```
+
+Test coverage: **76%** (39 tests passing)
+
+Coverage report: `build/htmlcov/index.html`
