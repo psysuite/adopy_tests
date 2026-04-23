@@ -60,7 +60,7 @@ class ValidationResult:
         return abs(self.jnd_diff_pct) <= threshold
 
 # ============================================================================
-# ACCESSORY
+# FUNCTIONS
 # ============================================================================
 
 def calculate_stability_from_values(
@@ -279,6 +279,7 @@ def fit_probit_psychometric(
         if fallback:
             return float(np.median(latencies)), float(np.std(latencies))
         raise
+
 
 
 def fit_gaussfit_psychometric(

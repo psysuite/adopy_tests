@@ -1,61 +1,44 @@
 """
 Progressive analyzer module for temporal bisection data analysis.
 
-Orchestrates GBF file parsing, progressive psychometric fitting (via ValidationAnalyzer),
-latency statistics, and Excel report generation.
-Fitting logic lives in utilities.psychometric_helpers (single source of truth).
+Orchestrates progressive psychometric fitting via utilities.progressive_analyzer,
+metadata extraction, and Excel report generation.
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, List
-import numpy as np
+import glob
 import logging
+import os
+from dataclasses import dataclass, field
+from typing import List
 
-from .parser import parse_data_file
-from .metadata import extract_metadata, SubjectMetadata
+import numpy as np
+
+from utilities.progressive_analyzer import ProgressiveAnalyzer, ProgressiveResult
 from .fitters import fit_gaussfit
-from utilities.psychometric_helpers import (
-    fit_logistic_psychometric,
-    fit_probit_psychometric,
-    calculate_latency_statistics,
-    calculate_stability_from_values,
-)
-
+from .metadata import extract_metadata, SubjectMetadata
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ProgressiveResult:
-    """Results from progressive analysis for one subject.
+class ProgressiveResultWithMetadata(ProgressiveResult):
+    """Extended ProgressiveResult with subject metadata.
     
-    Attributes:
-        metadata: Subject metadata
-        trial_counts: List of trial counts analyzed [40, 60, 80, 100, 120, 140, 160, 180, 200]
-        pse_values: PSE at each trial count (dict keyed by trial count)
-        jnd_values: JND at each trial count (dict keyed by trial count)
-        lat_mean: Mean latency at each count (dict keyed by trial count)
-        lat_std: Std latency at each count (dict keyed by trial count)
-        lat_range: Range latency at each count (dict keyed by trial count)
-        lat_entropy: Entropy at each count (dict keyed by trial count)
-        method: Fitting method used ('logistic', 'probit', 'gaussfit')
+    Inherits from ProgressiveResult and adds metadata information.
     """
-    metadata: SubjectMetadata
-    trial_counts: List[int] = field(default_factory=lambda: [40, 60, 80, 100, 120, 140, 160, 180, 200])
-    pse_values: Dict[int, float] = field(default_factory=dict)
-    jnd_values: Dict[int, float] = field(default_factory=dict)
-    lat_mean: Dict[int, float] = field(default_factory=dict)
-    lat_std: Dict[int, float] = field(default_factory=dict)
-    lat_range: Dict[int, float] = field(default_factory=dict)
-    lat_entropy: Dict[int, float] = field(default_factory=dict)
-    method: str = ""
+    metadata: SubjectMetadata = field(default_factory=lambda: SubjectMetadata(
+        subject_id="", age=0, gender="", modality="", 
+        algorithm="", group="", valid=False, filename=""
+    ))
 
 
 def analyze_subject_progressive(filepath: str, method: str = 'logistic', 
-                                bin_size: float = 10.0) -> ProgressiveResult:
+                                bin_size: float = 10.0) -> ProgressiveResultWithMetadata:
     """
     Perform progressive psychometric analysis on a single subject's data.
+    
+    Wraps utilities.progressive_analyzer with metadata extraction and gaussfit support.
     
     Args:
         filepath: Path to subject's data file
@@ -63,99 +46,73 @@ def analyze_subject_progressive(filepath: str, method: str = 'logistic',
         bin_size: Bin size for gaussfit method
         
     Returns:
-        ProgressiveResult containing all progressive analysis results
-        
-    Algorithm:
-        1. Parse data file
-        2. Extract metadata from filename
-        3. Initialize result structure with NaN values
-        4. For each N in [40, 60, 80, 100, 120, 140, 160, 180, 200]:
-           a. Check if total trials >= N
-           b. Extract first N trials in original order
-           c. Fit psychometric curve using specified method
-           d. Calculate latency statistics from first N trials
-           e. Store PSE, JND, and statistics
-           f. Log progress message
-        5. Return complete ProgressiveResult
-        
-    Error handling:
-        - Skip trial count if insufficient data
-        - Set NaN for failed fits but continue
-        - Log all errors with context
+        ProgressiveResultWithMetadata containing analysis results and metadata
     """
-    # Parse data file
-    trial_data = parse_data_file(filepath)
-    
-    if not trial_data.valid:
-        logger.error(f"Failed to parse file {filepath}: {trial_data.error_message}")
-        # Return empty result with invalid metadata
-        return ProgressiveResult(
-            metadata=SubjectMetadata(
-                subject_id="", age=0, gender="", modality="", 
-                algorithm="", group="", valid=False, filename=filepath
-            ),
-            method=method
-        )
-    
     # Extract metadata from filename
     metadata = extract_metadata(filepath)
     
     if not metadata.valid:
         logger.warning(f"Failed to extract metadata from filename: {filepath}")
     
-    # Initialize result structure
-    result = ProgressiveResult(metadata=metadata, method=method)
+    # Run progressive analysis using core analyzer
+    analyzer = ProgressiveAnalyzer()
     
-    # Initialize all values to NaN
-    for N in result.trial_counts:
-        result.pse_values[N] = np.nan
-        result.jnd_values[N] = np.nan
-        result.lat_mean[N] = np.nan
-        result.lat_std[N] = np.nan
-        result.lat_range[N] = np.nan
-        result.lat_entropy[N] = np.nan
-    
-    # Expand binned data to individual trials for progressive analysis
-    expanded_lat = []
-    expanded_resp = []
-    for lat, count, resp in zip(trial_data.latencies, trial_data.counts, trial_data.responses):
-        for _ in range(int(count)):
-            expanded_lat.append(lat)
-            expanded_resp.append(resp)
-    
-    expanded_lat = np.array(expanded_lat)
-    expanded_resp = np.array(expanded_resp)
-    total_trials = len(expanded_lat)
-    
-    logger.info(f"Analyzing {metadata.subject_id}: {total_trials} trials, method={method}")
-    
-    # Perform progressive analysis
-    for N in result.trial_counts:
-        if total_trials < N:
-            logger.info(f"  N={N}: Skipping (insufficient trials: {total_trials} < {N})")
-            continue
-        
-        # Extract first N trials in original order
-        first_n_lat = expanded_lat[:N]
-        first_n_resp = expanded_resp[:N]
-        
-        # Calculate latency statistics
-        stats = calculate_latency_statistics(first_n_lat)
-        result.lat_mean[N] = stats['mean']
-        result.lat_std[N] = stats['std']
-        result.lat_range[N] = stats['range']
-        result.lat_entropy[N] = stats['entropy']
-        
-        # Fit psychometric curve directly on individual trials
+    if method in ('logistic', 'probit'):
+        # Use core analyzer for logistic/probit
+        result = analyzer.run_progressive_analysis(filepath, method=method)
+        result_with_meta = ProgressiveResultWithMetadata(
+            trial_counts=result.trial_counts,
+            pse_values=result.pse_values,
+            jnd_values=result.jnd_values,
+            lat_mean=result.lat_mean,
+            lat_std=result.lat_std,
+            lat_range=result.lat_range,
+            lat_entropy=result.lat_entropy,
+            method=method,
+            metadata=metadata
+        )
+    elif method == 'gaussfit':
+        # For gaussfit, need custom handling
+        from utilities.data_loader import DataLoader
         try:
-            if method == 'logistic':
-                pse, jnd = fit_logistic_psychometric(first_n_lat, first_n_resp, fallback=True)
-                fit_success = True
-            elif method == 'probit':
-                pse, jnd = fit_probit_psychometric(first_n_lat, first_n_resp, fallback=True)
-                fit_success = True
-            elif method == 'gaussfit':
-                # gaussfit still needs binned format
+            latencies, responses = DataLoader.load_and_expand(filepath)
+        except Exception as e:
+            logger.error(f"Failed to load {filepath}: {e}")
+            return ProgressiveResultWithMetadata(method=method, metadata=metadata)
+        
+        result_with_meta = ProgressiveResultWithMetadata(method=method, metadata=metadata)
+        
+        # Initialize all values to NaN
+        for N in result_with_meta.trial_counts:
+            result_with_meta.pse_values[N] = np.nan
+            result_with_meta.jnd_values[N] = np.nan
+            result_with_meta.lat_mean[N] = np.nan
+            result_with_meta.lat_std[N] = np.nan
+            result_with_meta.lat_range[N] = np.nan
+            result_with_meta.lat_entropy[N] = np.nan
+        
+        total_trials = len(latencies)
+        logger.info(f"Analyzing {metadata.subject_id}: {total_trials} trials, method={method}")
+        
+        # Perform progressive analysis with gaussfit
+        for N in result_with_meta.trial_counts:
+            if total_trials < N:
+                logger.info(f"  N={N}: Skipping (insufficient trials: {total_trials} < {N})")
+                continue
+            
+            first_n_lat = latencies[:N]
+            first_n_resp = responses[:N]
+            
+            # Calculate latency statistics
+            from utilities.psychometric_helpers import calculate_latency_statistics
+            stats = calculate_latency_statistics(first_n_lat)
+            result_with_meta.lat_mean[N] = stats['mean']
+            result_with_meta.lat_std[N] = stats['std']
+            result_with_meta.lat_range[N] = stats['range']
+            result_with_meta.lat_entropy[N] = stats['entropy']
+            
+            # Fit with gaussfit
+            try:
                 unique_lats = np.unique(first_n_lat)
                 binned_lats, binned_counts, binned_resps = [], [], []
                 for lat in unique_lats:
@@ -163,35 +120,29 @@ def analyze_subject_progressive(filepath: str, method: str = 'logistic',
                     binned_lats.append(lat)
                     binned_counts.append(np.sum(mask))
                     binned_resps.append(np.sum(first_n_resp[mask]))
+                
                 fit_result = fit_gaussfit(np.array(binned_lats), np.array(binned_counts),
-                                          np.array(binned_resps), trial_data.guess_rate, bin_size)
-                fit_success = fit_result.success
-                pse, jnd = fit_result.pse, fit_result.jnd
-            else:
-                logger.error(f"Unknown method: {method}")
-                continue
-
-            if fit_success and np.isfinite(pse) and np.isfinite(jnd):
-                result.pse_values[N] = pse
-                result.jnd_values[N] = jnd
-                logger.info(f"  N={N}: PSE={pse:.1f}, JND={jnd:.1f}, "
-                            f"lat_mean={stats['mean']:.1f}, lat_std={stats['std']:.1f}, "
-                            f"entropy={stats['entropy']:.2f}")
-            else:
-                logger.warning(f"  N={N}: Fitting failed or returned NaN")
-                result.pse_values[N] = np.nan
-                result.jnd_values[N] = np.nan
-
-        except Exception as e:
-            logger.error(f"  N={N}: Exception during fitting - {str(e)}")
-            result.pse_values[N] = np.nan
-            result.jnd_values[N] = np.nan
+                                          np.array(binned_resps), 0.5, bin_size)
+                
+                if fit_result.success and np.isfinite(fit_result.pse) and np.isfinite(fit_result.jnd):
+                    result_with_meta.pse_values[N] = fit_result.pse
+                    result_with_meta.jnd_values[N] = fit_result.jnd
+                    logger.info(f"  N={N}: PSE={fit_result.pse:.1f}, JND={fit_result.jnd:.1f}, "
+                                f"lat_mean={stats['mean']:.1f}, lat_std={stats['std']:.1f}, "
+                                f"entropy={stats['entropy']:.2f}")
+                else:
+                    logger.warning(f"  N={N}: Fitting failed or returned NaN")
+            except Exception as e:
+                logger.error(f"  N={N}: Exception during fitting - {str(e)}")
+    else:
+        logger.error(f"Unknown method: {method}")
+        result_with_meta = ProgressiveResultWithMetadata(method=method, metadata=metadata)
     
-    return result
+    return result_with_meta
 
 
 def analyze_batch(input_dir: str, output_dir: str, project_name: str,
-                  method: str = 'logistic', bin_size: float = 10.0) -> List[ProgressiveResult]:
+                  method: str = 'logistic', bin_size: float = 10.0) -> List[ProgressiveResultWithMetadata]:
     """
     Analyze all subjects in input directory and generate Excel reports.
     
@@ -203,23 +154,8 @@ def analyze_batch(input_dir: str, output_dir: str, project_name: str,
         bin_size: Bin size for gaussfit method
         
     Returns:
-        List of ProgressiveResult objects for successfully analyzed subjects
-        
-    Behavior:
-        1. Find all .txt files in input_dir
-        2. Print header with method and file count
-        3. For each file:
-           a. Print progress message (file N of M)
-           b. Call analyze_subject_progressive() with error handling
-           c. Add to results list or skipped list
-        4. Maintain list of skipped/failed filenames
-        5. Print summary: total files, successfully processed, skipped count
-        6. Print list of skipped filenames if any
-        7. Generate Excel reports (wide and long formats)
-        8. Return list of ProgressiveResult objects
+        List of ProgressiveResultWithMetadata objects for successfully analyzed subjects
     """
-    import os
-    import glob
     from .report_generator import generate_wide_format, generate_long_format
     
     # Find all .txt files

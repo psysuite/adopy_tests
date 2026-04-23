@@ -6,7 +6,7 @@ offset      = 500
 nTrials     = 50
 
 ado_params  = {"guess_rate":0.5, "lapse_rate":0.04, "noise_perc":0.1}
-bis_params  = {"min":5, "max": 300, "offset":offset, "ntrials":nTrials, "is_absolute":False}
+bis_params  = {"min":5, "max": 300, "offset":offset, "ntrials":nTrials}
 exp = qw.BISRelADOpyWrapper(ado_params, bis_params)
 
 max_slope = exp.params["slope"][len(exp.params["slope"])-1]

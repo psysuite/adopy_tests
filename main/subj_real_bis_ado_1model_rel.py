@@ -23,7 +23,7 @@ nFixed = 10  # Fixed trials (repeated twice: once at start, once mixed) - 5 pre 
 FIXED_OFFSETS_REL = [25, 75, 125, 175, 225]  # Creates 10 latencies: 5 pre + 5 post
 
 ado_params = {"guess_rate": 0.5, "lapse_rate": 0.04, "noise_perc": 0.1}
-bis_params = {"min": 5, "max": 300, "offset": offset, "ntrials": nTrials, "is_absolute": False}
+bis_params = {"min": 5, "max": 300, "offset": offset, "ntrials": nTrials}
 exp = qw.BISRelADOpyWrapper(ado_params, bis_params)
 
 max_slope = exp.params["slope"][len(exp.params["slope"]) - 1]
