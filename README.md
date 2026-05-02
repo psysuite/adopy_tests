@@ -2,26 +2,28 @@
 
 ## Overview
 
-This guide describes the implementation of temporal bisection experiments using three different ADOpy models. The codebase includes 9 main experiment files organized by model type and execution mode.
+This guide describes the implementation of temporal bisection experiments using three different ADOpy models. The codebase includes 6 main experiment files (console and real audio) plus a comprehensive group simulation pipeline with multithreading support and advanced psychometric analysis.
 
 ---
 
 ## The Three Models
 
-### 1. 1-Model Absolute (1model_abs)
+### 1. ABS1 (Absolute Single-Engine Model)
 
 **Characteristics:**
 - Uses a single ADOpy engine with absolute stimulus values
 - Stimulus range: 200-800ms (centered around 500ms offset)
 - Guess rate: 0.04 (low, since absolute comparison is easier)
 - Lapse rate: 0.04
-- Noise: 10%
+- Noise: 5%
 
 **How it works:**
 - ADOpy directly suggests stimulus times in milliseconds (e.g., 350ms, 650ms)
 - User responds: "Is the second tone closer to the first (1) or third (2)?"
 - Response is binary: 0 (closer to first) or 1 (closer to third)
 - ADOpy updates based on the response and absolute stimulus value
+
+**Key feature:** Can exhibit stimulus presentation bias (more stimuli on one side of offset)
 
 **Best for:**
 - Simple bisection tasks
@@ -30,7 +32,7 @@ This guide describes the implementation of temporal bisection experiments using 
 
 ---
 
-### 2. 1-Model Relative (1model_rel)
+### 2. REL1 (Relative Single-Engine Model)
 
 **Characteristics:**
 - Uses a single ADOpy engine with relative stimulus values (magnitudes)
@@ -38,16 +40,18 @@ This guide describes the implementation of temporal bisection experiments using 
 - Guess rate: 0.5 (higher, since relative comparison is harder)
 - Lapse rate: 0.04
 - Noise: 10%
-- Block randomization: 4 pre + 4 post every 8 trials
+- Block randomization: 5 pre + 5 post every 10 trials
 
 **How it works:**
 - ADOpy suggests a magnitude (distance from offset)
-- Randomly selects pre or post (in blocks of 8 trials)
+- Randomly selects pre or post (in blocks of 10 trials)
 - Converts magnitude to absolute stimulus:
   - Pre: `stimulus = offset - magnitude` (e.g., 500 - 50 = 450ms)
   - Post: `stimulus = offset + magnitude` (e.g., 500 + 50 = 550ms)
 - User responds: 0 or 1
 - ADOpy updates based on success (correct/incorrect) and magnitude
+
+**Key feature:** Enforces balanced pre/post stimulus presentation by design
 
 **Best for:**
 - Balanced pre/post stimulus presentation
@@ -56,7 +60,7 @@ This guide describes the implementation of temporal bisection experiments using 
 
 ---
 
-### 3. 2-Model Relative (2model_rel)
+### 3. REL2 (Relative Dual-Engine Model)
 
 **Characteristics:**
 - Uses TWO separate ADOpy engines (one for pre, one for post)
@@ -64,16 +68,18 @@ This guide describes the implementation of temporal bisection experiments using 
 - Guess rate: 0.5 for both
 - Lapse rate: 0.04
 - Noise: 10%
-- Block randomization: 4 pre + 4 post every 8 trials
+- Block randomization: 5 pre + 5 post every 10 trials
 
 **How it works:**
 - Maintains two independent ADOpy engines: `exp_pre` and `exp_post`
 - Each trial randomly selects which model to use (block randomized)
 - Selected model suggests a magnitude
-- Converts to absolute stimulus (same as 1model_rel)
+- Converts to absolute stimulus (same as REL1)
 - User responds: 0 or 1
 - Only the selected model updates based on success
 - At the end, data from both models is combined for analysis
+
+**Key feature:** Allows independent optimization of pre and post discrimination
 
 **Best for:**
 - When pre and post stimuli might have different psychometric properties
@@ -84,23 +90,23 @@ This guide describes the implementation of temporal bisection experiments using 
 
 ## File Organization
 
-The 9 main experiment files are organized in a 3×3 matrix:
+### Experiment Files (6 files)
 
-|                | Console Input | Real Audio | Group Simulation |
-|----------------|---------------|------------|------------------|
-| 1model_abs     | ✓             | ✓          | ✓                |
-| 1model_rel     | ✓             | ✓          | ✓                |
-| 2model_rel     | ✓             | ✓          | ✓                |
+The 6 main experiment files are organized in a 3×2 matrix:
 
-### File Naming Convention
+|                | Console Input | Real Audio |
+|----------------|---------------|------------|
+| ABS1           | ✓             | ✓          |
+| REL1           | ✓             | ✓          |
+| REL2           | ✓             | ✓          |
 
+**File Naming Convention:**
 - `subj_console_bis_ado_*` - Console-based experiments (keyboard input)
 - `subj_real_bis_ado_*` - Real audio experiments (plays tones)
-- `group_sim_bis_ado_*` - Group simulations (20 subjects, synthetic data)
 
 ---
 
-## File Details
+## Experiment Files Details
 
 ### Console Files (3 files)
 
@@ -120,19 +126,9 @@ The 9 main experiment files are organized in a 3×3 matrix:
 
 **Execution:**
 ```bash
-python main/subj_console_bis_ado_1model_abs.py
-python main/subj_console_bis_ado_1model_rel.py
-python main/subj_console_bis_ado_2model_rel.py
-```
-
-**Output format:**
-```
-============================================================
-TEMPORAL BISECTION EXPERIMENT - 1MODEL_ABS
-============================================================
-TRIAL 1/60
-First tone: 500ms | Second tone: XXXms | Third tone: 500ms
-Is the second tone closer to the first (1) or the third (2)? 
+python main/subj_console_bis_ado_ABS1.py
+python main/subj_console_bis_ado_REL1.py
+python main/subj_console_bis_ado_REL2.py
 ```
 
 ---
@@ -161,83 +157,348 @@ Is the second tone closer to the first (1) or the third (2)?
 
 **Execution:**
 ```bash
-python main/subj_real_bis_ado_1model_abs.py
-python main/subj_real_bis_ado_1model_rel.py
-python main/subj_real_bis_ado_2model_rel.py
+python main/subj_real_bis_ado_ABS1.py
+python main/subj_real_bis_ado_REL1.py
+python main/subj_real_bis_ado_REL2.py
 ```
-
-**Audio implementation:**
-- Uses `utilities/real_exp_accessories.py`
-- Pre-generates tones with WAV caching
-- Includes fade in/out to eliminate clicks
-- 50ms padding at start/end of buffer
 
 ---
 
-### Group Simulation Files (3 files)
+## Group Simulation Pipeline
 
-**Location:** `main/group_sim_bis_ado_*.py`
+### Overview
 
-**Purpose:** Simulate experiments for 20 subjects with synthetic responses
+The group simulation pipeline generates synthetic data for multiple subjects across a grid of PSE/JND parameters. It features:
+
+- **Multithreading:** Parallel subject simulation and progressive analysis
+- **Progressive Analysis:** Psychometric metrics calculated at trial intervals (40, 60, 80, ..., 200)
+- **Advanced Metrics:** Asymmetry index, stimulus distribution analysis, bimodality detection
+- **Grid Organization:** Variable grid size (default: 9 groups with PSE: 480/500/520 × JND: 20/40/60, configurable)
+- **Batch Processing:** 20 subjects per group, 200 trials per subject
+
+### Files (3 files)
+
+**Location:** `main/group_sim_gridrnd_*.py`
+
+**Purpose:** Simulate experiments on a PSE/JND grid with multithreading
 
 **Input:**
-- Number of subjects: 20 (hardcoded)
-- Number of trials per subject: 60
-- Random PSE range: [485, 515] ms
-- Random JND range: [20, 60] ms
-- Random seed: 42 (for reproducibility)
+- PSE grid: [480, 500, 520] (configurable)
+- JND grid: [20, 40, 60] (configurable)
+- Subjects per group: 20 (configurable)
+- Trials per subject: 200 (configurable)
+- Multithreading: MAX_WORKERS (default: 3-4 threads, configurable)
 
-**Output:**
-
-1. **Excel file:** `{PREFIX}_results_summary.xlsx`
-   - One row per subject with fitted parameters
-   - Two summary rows: GROUP_mean, GROUP_std
-   - Columns: subj, pse, jnd, fitted_pse, fitted_jnd, r_squared, etc.
-
-2. **Group plots:**
-   - `{PREFIX}_group_histogram.png` - Success/failure distribution (all 3 files)
-   - `{PREFIX}_group_model_histogram.png` - Pre/post distribution (2model_rel only)
-   - `{PREFIX}_group_psychometric.png` - Group psychometric curve (all 3 files)
-
-3. **Individual plots:** (one per subject)
-   - `{subject_id}_psychometric.png`
-
-4. **Log file:** `sim_*_model_*.log`
-
-**File prefixes:**
-- 1model_abs: `SIM1ABS`
-- 1model_rel: `SIM1REL`
-- 2model_rel: `SIM2REL`
+**Output (per model):**
+1. **GBF files:** `SXX_GZ_PSE_JND_MODEL.txt` (N files, where N = grid_size × subjects_per_group)
+   - Filename format embeds jittered PSE/JND values for skip mode loading
+2. **Group plots:** Histograms, psychometric curves, model histograms (REL2 only)
+3. **Grid plots:** Combined grids for all groups (size depends on PSE/JND grid dimensions)
+4. **Excel:** `{model}_G{group}_results_summary.xlsx` with progressive metrics
+5. **Analysis plots:** 5 metric evolution plots (asymmetry, stimulus center/spread, bimodality)
 
 **Execution:**
 ```bash
-python main/group_sim_bis_ado_1model_abs.py
-python main/group_sim_bis_ado_1model_rel.py
-python main/group_sim_bis_ado_2model_rel.py
+python main/group_sim_gridrnd_ABS1.py
+python main/group_sim_gridrnd_REL1.py
+python main/group_sim_gridrnd_REL2.py
 ```
 
-**Output directory:** `../data/output/sim/`
+**Output directory:** `../data/output/sim_gridrnd/{model}/`
 
-**Response generation:**
-- Uses psychophysical model: `generate_response(stimulus, pse, sigma)`
-- Internal perception: `N(stimulus, sigma)`
-- Response: 1 if perception > PSE, else 0
-- Sigma derived from JND: `sigma = JND / 0.6745`
+### Skip Mode
+
+If `SKIP_PHASES_1_2=True` in the script:
+- Phases 1-2 (task creation and simulation) are skipped
+- GBF files are loaded from disk
+- PSE/JND values are extracted from filename using `parse_gbf_filename()`
+- If filename parsing fails (old format), falls back to progressive fit values with warning
+- Phases 3-6 (analysis and plotting) proceed normally
+
+This allows re-running analysis on existing simulations without re-generating GBF files.
+
+### Architecture: 5-Phase Pipeline
+
+**Phase 1: Task Creation**
+- Create SubjectSimulationTask objects for all subjects in group
+- Each task contains PSE/JND parameters with ±2.5 random variation
+
+**Phase 2: Parallel Subject Simulation**
+- Run all subject simulations in parallel (one thread per subject)
+- Each thread runs 200 trials with ADOpy adaptive sampling
+- Generates GBF files and trial data
+
+**Phase 3: Parallel Progressive Analysis**
+- Run progressive psychometric analysis in parallel
+- Calculate PSE/JND at trial counts: 40, 60, 80, 100, 120, 140, 160, 180, 200
+- Calculate asymmetry index at same trial counts
+- Calculate stimulus distribution metrics (center, spread, bimodality)
+
+**Phase 4: Sequential Plot & Excel Generation**
+- Generate group plots (histograms, psychometric curves)
+- Consolidate results to Excel with all metrics
+- Add GROUP_mean and GROUP_std rows
+
+**Phase 5: Grid Plot Creation**
+- Combine group plots into grids (size depends on PSE/JND grid dimensions)
+- One grid per plot type (histogram, psychometric, model_histogram)
+- Labels show PSE/JND values for each subplot
+
+**Phase 6: Analysis Metric Plots**
+- Generate 5 analysis plots from all group Excel files:
+  1. Asymmetry index evolution (modulo)
+  2. Asymmetry scatter + envelope
+  3. Stimulus center evolution
+  4. Stimulus spread evolution
+  5. Bimodality index evolution
+- Plots aggregate data across all groups and subjects
+
+### Multithreading Configuration
+
+**MAX_WORKERS parameter:**
+- Controls number of parallel threads for subject simulation and analysis
+- Default: 3-4 (configurable per model)
+- Recommendation: Set to number of CPU cores for optimal performance
+- User manages manually (no automatic CPU detection)
 
 ---
 
-## Common Features Across All Files
+## Advanced Metrics
+
+### 1. Asymmetry Index
+
+**Definition:** `(n_after - n_before) / total`
+
+**Range:** [-1, 1]
+
+**Interpretation:**
+- `0`: Perfectly balanced (50-50 split)
+- `> 0`: Bias toward stimuli after offset (right side)
+- `< 0`: Bias toward stimuli before offset (left side)
+- `±1`: All stimuli on one side
+
+**Use case:** Detect if ADOpy is biased in stimulus selection (especially 1model_abs)
+
+**Progressive calculation:** Computed at trial counts 40, 60, 80, ..., 200 to track convergence
+
+---
+
+### 2. Stimulus Distribution Metrics
+
+**stimulus_center:** Mean of stimulus latencies
+- Should correlate with PSE parameter
+- Tracks how well the presented stimuli match intended PSE
+
+**stimulus_spread:** Standard deviation of stimulus latencies
+- Should correlate with JND parameter
+- Tracks how well the presented stimuli match intended JND
+
+**stimulus_min / stimulus_max:** Range of stimulus latencies
+- Validates that stimuli stay within expected bounds
+
+**bimodality_index:** Measure of distribution shape
+- Range: [0, 1]
+- `0`: Unimodal (single peak)
+- `1`: Perfectly bimodal (two equal peaks)
+- Detects if stimuli cluster around two distinct values
+
+**Progressive calculation:** All metrics computed at trial counts 40, 60, 80, ..., 200
+
+---
+
+### 3. Psychometric Metrics (Progressive)
+
+**PSE (Point of Subjective Equality):** Fitted mean of psychometric function
+- Calculated at each trial count to track convergence
+- Columns: `pse_40`, `pse_60`, ..., `pse_200`
+
+**JND (Just Noticeable Difference):** Fitted standard deviation × 0.6745
+- Calculated at each trial count to track convergence
+- Columns: `jnd_40`, `jnd_60`, ..., `jnd_200`
+
+---
+
+## Excel Output Format
+
+### Columns (per subject row)
+
+**Metadata:**
+- `subj`: Subject identifier
+- `pse`: True PSE parameter
+- `jnd`: True JND parameter
+- `n_trials`: Total trials completed
+
+**Psychometric metrics (progressive):**
+- `pse_40`, `pse_60`, ..., `pse_200`: PSE at each trial count
+- `jnd_40`, `jnd_60`, ..., `jnd_200`: JND at each trial count
+
+**Asymmetry metrics (progressive):**
+- `asymmetry_40`, `asymmetry_60`, ..., `asymmetry_200`: Asymmetry index at each trial count
+
+**Stimulus distribution metrics (progressive):**
+- `stimulus_center_40`, `stimulus_center_60`, ..., `stimulus_center_200`: Mean stimulus latency
+- `stimulus_spread_40`, `stimulus_spread_60`, ..., `stimulus_spread_200`: Std of stimulus latency
+- `bimodality_index_40`, `bimodality_index_60`, ..., `bimodality_index_200`: Bimodality measure
+
+**Summary rows:**
+- `GROUP_mean`: Mean of all metrics across subjects
+- `GROUP_std`: Standard deviation of all metrics across subjects
+
+---
+
+## Stimulus Distribution Validation Analysis
+
+### Overview
+
+This analysis validates that the stimulus latencies presented during simulations follow the intended PSE/JND parameters. The analysis quantifies:
+
+1. **Stimulus Center (SC)**: Mean of presented latencies → should correlate with PSE
+2. **Stimulus Spread (SS)**: Std of presented latencies → should correlate with JND
+3. **Bimodality Index (BI)**: Measure of how bimodal the distribution is → should increase with JND
+
+All metrics are calculated **cumulatively** at progressive trial blocks (40, 60, 80, 100, 120, 140, 160, 180, 200).
+
+### Workflow
+
+**Step 1: Run Simulations**
+```bash
+python main/group_sim_gridrnd_ABS1.py
+python main/group_sim_gridrnd_REL1.py
+python main/group_sim_gridrnd_REL2.py
+```
+
+These scripts automatically calculate stimulus metrics and add them to Excel files during Phase 3.
+
+**Step 2: Retroactively Add Metrics (if needed)**
+If you have existing simulations without metrics:
+```bash
+python main/post_add/add_progressive_stimulus_metrics.py
+```
+
+**Step 3: Generate Validation Plots**
+```bash
+python main/post_plot/regenerate_grid_plots.py
+```
+
+Regenerates grid plots from existing individual plots without re-running simulations.
+
+**Step 4: Export for R Analysis**
+```bash
+python main/export_stimulus_metrics_for_r.py
+```
+
+Creates: `../data/output/stimulus_metrics_for_r/stimulus_metrics_all_models.csv`
+
+**Step 5: Statistical Analysis in R**
+Use the R workspace (`R_bis_ad_fx`) to perform:
+- Hartigan's dip test for bimodality validation
+- Pearson/Spearman correlations (SC vs PSE, SS vs JND)
+- Linear regression models
+- Statistical significance testing
+
+### Excel Columns Added
+
+For each trial block (40, 60, 80, 100, 120, 140, 160, 180, 200):
+
+- `stimulus_center_{n}`: Mean latency up to trial n
+- `stimulus_spread_{n}`: Std of latencies up to trial n
+- `stimulus_min_{n}`: Min latency up to trial n
+- `stimulus_max_{n}`: Max latency up to trial n
+- `bimodality_index_{n}`: Bimodality measure (0=unimodal, 1=bimodal)
+
+### Expected Results
+
+**ABS1:**
+- **Stimulus Center**: Should converge to PSE value
+- **Stimulus Spread**: Should converge to JND value
+- **Bimodality Index**: Should increase with JND (higher JND → more bimodal)
+
+**REL1 & REL2:**
+- **Stimulus Center**: Should remain ~500 (balanced around offset)
+- **Stimulus Spread**: Should be lower than ABS1 (more constrained)
+- **Bimodality Index**: Should be low (balanced presentation)
+
+### Bimodality Index Interpretation
+
+The bimodality index is calculated as:
+- Find histogram peaks (local maxima)
+- If 2+ peaks exist: ratio of 2nd peak to 1st peak
+- If <2 peaks: 0 (unimodal)
+
+Range: [0, 1]
+- 0: Unimodal (single peak)
+- 0.5: Two peaks of similar height
+- 1: Two peaks of equal height
+
+For validation in R, use Hartigan's dip test for statistical significance.
+
+---
+
+## Recreate plots
+
+**`main/post_plot/regenerate_grid_plots.py`:** Recreate grid plots from existing individual plots without re-running simulations
+**`main/post_plot/plot_analysis_metrics.py`:** Generate 5 analysis plots from all group Excel files (runs automatically as Phase 6)
+
+---
+
+### Other Utility Scripts
+
+
+**`main/post_add/add_progressive_asymmetry.py`:** Retroactively add progressive asymmetry calculations to existing Excel files
+
+**`main/post_add/add_progressive_stimulus_metrics.py`:** Retroactively add stimulus distribution metrics to existing Excel files
+
+**`main/export_stimulus_metrics_for_r.py`:** Export stimulus distribution metrics for statistical analysis in R
+
+
+---
+
+## Architecture Overview
+
+### Core Modules
+
+**Simulation Engine:**
+- `analysis/core/simulation_engine.py` - Unified simulation logic for all three models
+
+**Multithreading:**
+- `utilities/multithreading_utils.py` - SubjectSimulationTask and MultiThreadedSimulationRunner classes
+  - `parse_gbf_filename()` - Extract PSE/JND from filename
+  - `load_gbf_files_for_group()` - Load GBF files for skip mode
+  - `backfill_skip_mode()` - Fill trial data from GBF files
+  - `parse_gbf_filename()` - Extract PSE/JND from filename
+  - `load_gbf_files_for_group()` - Load GBF files for skip mode
+  - `backfill_skip_mode()` - Fill trial data from GBF files
+
+**Psychometric Analysis:**
+- `analysis/core/psychometric_analysis.py` - Core analysis functions:
+  - `calculate_asymmetry_metrics()` - Asymmetry index calculation
+  - `calculate_progressive_asymmetry()` - Progressive asymmetry at trial counts
+  - `calculate_progressive_stimulus_metrics()` - Stimulus distribution analysis
+  - `analyze_subject_results()` - Complete subject analysis pipeline
+  - `consolidate_results()` - Excel generation (drops `subject_id` and `status` columns)
+  - `add_group_stats_to_excel()` - Add GROUP_mean/std rows
+
+**Plotting:**
+- `utilities/plotting.py` - Plotting functions:
+  - `plot_group_histograms()` - Group stimulus distribution
+  - `plot_group_psychometric()` - Group psychometric curves
+  - `plot_group_model_histograms()` - Model-specific histograms (REL2)
+  - `create_grid_plots_from_groups()` - 3×3 grid creation with PSE/JND labels
+
+---
+
+## Common Features
 
 ### Uniform Output Structure
 
-All 9 files share the same output format:
+All experiment files share the same output format:
 
 1. **Header:** 60 `=` characters with experiment title
 2. **Trial display:** `TRIAL X/N` format
 3. **Input prompt:** "Is the second tone closer to the first (1) or the third (2)?"
 4. **Footer:** "EXPERIMENT COMPLETE"
 5. **Statistics:** Via `print_statistics()` function
-6. **Fitted parameters:** PSE and JND from Gaussian fit
+6. **Fitted parameters:** PSE and JND from psychometric fit
 7. **Psychometric plot:** Individual curve with data points
 
 ### Statistics Reported
@@ -247,6 +508,7 @@ All 9 files share the same output format:
 - Trials below/above offset (count and percentage)
 - Stimulus range (min, max, mean, median, std)
 - Response accuracy (if applicable)
+- Asymmetry metrics (n_before, n_after, asymmetry_index)
 
 ### Psychometric Analysis
 
@@ -259,26 +521,6 @@ All files use:
   - Blue line: Fitted curve
   - Green dashed line: True threshold (500ms)
   - Gray dotted line: 0.5 probability
-
----
-
-## Dependencies
-
-### Core Libraries
-- `numpy` - Numerical operations
-- `pandas` - Data handling
-- `matplotlib` - Plotting
-- `scipy` - Statistical functions and curve fitting
-- `adopy` - Adaptive experimental design
-
-### Custom Modules
-- `bisection/BISAbsADOpyWrapper.py` - Absolute model wrapper
-- `bisection/BISRelADOpyWrapper.py` - Relative model wrapper
-- `bisection/psychometric_analysis.py` - Analysis functions
-- `bisection/logging_config.py` - Logging setup
-- `utilities/misc_generate_responses.py` - Response generation
-- `utilities/plotting.py` - Plotting functions
-- `utilities/real_exp_accessories.py` - Audio generation
 
 ---
 
@@ -306,53 +548,76 @@ All files use:
 4. Generate plots
 5. Save outputs
 
-### Group Simulation Workflow
-1. Initialize logger and output directory
-2. For each subject (20 total):
-   - Generate random PSE and JND
-   - Initialize ADOpy engine(s)
-   - For each trial (60 total):
-     - Get stimulus from ADOpy
-     - Generate synthetic response
-     - Update ADOpy
-     - Collect trial data
-   - Analyze subject results
-   - Generate individual plot
-3. Generate group plots (histograms + psychometric)
-4. Consolidate results to Excel
-5. Add group statistics (mean, std)
-6. Print summary report
+### Group Simulation Workflow (Multithreaded)
+1. **Phase 1:** Create simulation tasks for all subjects in group
+2. **Phase 2:** Run all subject simulations in parallel
+3. **Phase 3:** Run progressive analyses in parallel
+4. **Phase 4:** Generate plots and Excel sequentially
+5. **Phase 5:** Create grid plots combining all 9 groups
 
 ---
 
 ## Key Differences Between Models
 
-| Feature | 1model_abs | 1model_rel | 2model_rel |
-|---------|------------|------------|------------|
+| Feature | ABS1 | REL1 | REL2 |
+|---------|------|------|------|
 | Engines | 1 | 1 | 2 (pre + post) |
 | Stimulus space | Absolute (200-800ms) | Relative (5-300ms) | Relative (0-300ms each) |
 | Guess rate | 0.04 | 0.5 | 0.5 |
-| Pre/post balance | Natural | Block randomized | Block randomized |
+| Pre/post balance | Natural (can be biased) | Block randomized (balanced) | Block randomized (balanced) |
 | Update method | Response (0/1) | Success (correct/incorrect) | Success per model |
+| Asymmetry bias | Can exhibit | Enforced balanced | Enforced balanced |
 
 ---
 
-## Output File Summary
+## Output Directory Structure
 
-### Console & Real Audio
-- Individual psychometric plots
-- Console statistics
-- Saved to `../data/output/console/` or `../data/output/real/`
+```
+data/output/
+├── console/
+│   ├── {subject_id}_psychometric.png
+│   └── ...
+├── real/
+│   ├── {subject_id}_psychometric.png
+│   └── ...
+└── sim_gridrnd/
+    ├── ABS1/
+    │   ├── group_480_20/
+    │   │   ├── S*_G*_PSE_JND_ABS1.txt (20 GBF files)
+    │   │   └── results/
+    │   │       ├── ABS1_G1_group_histogram.png
+    │   │       ├── ABS1_G1_group_psychometric.png
+    │   │       └── ABS1_G1_results_summary.xlsx
+    │   ├── group_480_40/ ... (N groups total, configurable)
+    │   ├── ABS1_histogram_grid.png
+    │   ├── ABS1_psychometric_grid.png
+    │   ├── asymmetry_modulo.png
+    │   ├── asymmetry_scatter_envelope.png
+    │   ├── stimulus_center_evolution.png
+    │   ├── stimulus_spread_evolution.png
+    │   └── bimodality_index_evolution.png
+    ├── REL1/ (similar structure)
+    └── REL2/ (similar structure)
+```
 
-### Group Simulation
-- Excel: `{PREFIX}_results_summary.xlsx` (20 subjects + 2 summary rows)
-- Plots:
-  - `{PREFIX}_group_histogram.png` (all)
-  - `{PREFIX}_group_model_histogram.png` (2model_rel only)
-  - `{PREFIX}_group_psychometric.png` (all)
-  - Individual: `S001_psychometric.png` ... `S020_psychometric.png`
-- Log: `sim_*_model_*.log`
-- Saved to `../data/output/sim/`
+---
+
+## Dependencies
+
+### Core Libraries
+- `numpy >= 1.20.0` - Numerical operations
+- `pandas >= 1.3.0` - Data handling
+- `matplotlib >= 3.3.0` - Plotting
+- `scipy >= 1.7.0` - Statistical functions and curve fitting
+- `statsmodels >= 0.13.0` - GLM fitting
+- `adopy >= 0.3.0` - Adaptive experimental design
+- `openpyxl >= 3.0.0` - Excel file generation
+- `Pillow >= 8.0.0` - Image processing for grid plots
+
+### Custom Modules
+- `utilities/` - Helper functions and utilities
+- `analysis/` - Psychometric analysis pipeline
+- `bisection/` - ADOpy wrappers
 
 ---
 
@@ -360,33 +625,22 @@ All files use:
 
 1. **Start with console files** to understand the experiment flow
 2. **Use real audio files** for actual data collection
-3. **Use group simulation files** to:
+3. **Use group simulations** to:
+   - Generate systematic datasets for validation
    - Test analysis pipelines
-   - Generate synthetic datasets
-   - Validate experimental parameters
-   - Compare model performance
-
-4. **Choose the right model:**
-
-
----
-
-*Last updated: 2026-04-16*
-
+   - Compare model performance across PSE/JND space
+4. **Use asymmetry analysis** to:
+   - Detect stimulus presentation bias (ABS1)
+   - Validate that REL1/REL2 maintain balance
+   - Track convergence of asymmetry across trials
+5. **Use stimulus metrics** to:
+   - Validate that presented stimuli match intended PSE/JND
+   - Detect bimodal stimulus distributions
+   - Analyze ADOpy sampling behavior
 
 ---
 
-## 📚 Additional Documentation
-
-For more detailed information, see the `docs/` folder:
-
-- **[Quick Start Guide](docs/QUICK_START.txt)** - Visual quick reference
-- **[Setup Complete](docs/SETUP_COMPLETE.md)** - Setup verification and next steps
-- **[Project Structure](docs/PROJECT_STRUCTURE.md)** - Complete project layout
-- **[Build Artifacts](docs/BUILD_ARTIFACTS.md)** - Understanding the `build/` folder
-- **[Test Summary](docs/TEST_SUMMARY.md)** - Test results and coverage report
-
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run all tests
@@ -399,6 +653,16 @@ make coverage
 make clean
 ```
 
-Test coverage: **76%** (39 tests passing)
+---
 
-Coverage report: `build/htmlcov/index.html`
+*Last updated: 2026-04-29*
+
+## 📚 Additional Documentation
+
+For more detailed information, see the `docs/` folder:
+
+- **[Quick Start Guide](docs/QUICK_START.txt)** - Visual quick reference
+- **[Setup Complete](docs/SETUP_COMPLETE.md)** - Setup verification and next steps
+- **[Project Structure](docs/PROJECT_STRUCTURE.md)** - Complete project layout
+- **[Build Artifacts](docs/BUILD_ARTIFACTS.md)** - Understanding the `build/` folder
+- **[Test Summary](docs/TEST_SUMMARY.md)** - Test results and coverage report

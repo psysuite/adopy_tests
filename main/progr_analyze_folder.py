@@ -10,11 +10,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utilities.progressive_analyzer import ProgressiveAnalyzer
+from analysis.core.progressive_analyzer import ProgressiveAnalyzer
+from analysis.core.psychometric_helpers import calculate_stability_from_values
 
 # ============================================================================
 INPUT_FOLDER = "/data/CODE/python/adopy_tests/data/input/expdata"
-INPUT_FOLDER = "/data/CODE/python/adopy_tests/data/output/sim_grid/2model_rel"
+# INPUT_FOLDER = "/data/CODE/python/adopy_tests/data/output/sim_grid/2model_rel"
 STABILITY_THRESHOLD = 0.10
 # ============================================================================
 
@@ -22,6 +23,7 @@ BLOCKS = [40, 60, 80, 100, 120, 140, 160, 180, 200]
 
 
 def main():
+
     logging.basicConfig(level=logging.WARNING)
 
     analyzer = ProgressiveAnalyzer(blocks=BLOCKS)
@@ -54,7 +56,6 @@ def main():
         
         # Calculate stability point
         jnd_list = [result.jnd_values[N] for N in valid_blocks]
-        from utilities.psychometric_helpers import calculate_stability_from_values
         jnd_sp = calculate_stability_from_values(jnd_list, STABILITY_THRESHOLD, valid_blocks)
 
         print(f"{filepath.name:<50} {jnd_cols} {jnd_sp:>8}")

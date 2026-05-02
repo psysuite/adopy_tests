@@ -67,7 +67,7 @@ def plot_stim_model_hist(rows, filepath, offset, subj):
     return filepath
 
 
-def plot_group_histograms(all_rows_list, output_dir, file_prefix, offset):
+def plot_group_histograms(all_rows_list, output_dir, file_prefix, offset, group_label=None):
     """Create group histograms combining data from all subjects."""
 
     # Flatten all rows from all subjects
@@ -92,7 +92,8 @@ def plot_group_histograms(all_rows_list, output_dir, file_prefix, offset):
     plt.axvline(offset, color='blue', linestyle='--', linewidth=2, label=f'Offset ({offset}ms)')
     plt.xlabel('Stimulus latency (ms)')
     plt.ylabel('Count')
-    plt.title('Group stimulus distribution (all subjects)')
+    title = group_label if group_label else 'Group stimulus distribution (all subjects)'
+    plt.title(title)
     plt.legend()
     plt.grid(True, alpha=0.3)
 
@@ -100,7 +101,7 @@ def plot_group_histograms(all_rows_list, output_dir, file_prefix, offset):
     plt.savefig(plot_filename, bbox_inches='tight', dpi=100)
     plt.close()
 
-def plot_group_model_histograms(all_rows_list, output_dir, file_prefix, offset):
+def plot_group_model_histograms(all_rows_list, output_dir, file_prefix, offset, group_label=None):
 
     # Flatten all rows from all subjects
     all_rows = [row for rows in all_rows_list for row in rows]
@@ -123,7 +124,8 @@ def plot_group_model_histograms(all_rows_list, output_dir, file_prefix, offset):
     plt.axvline(offset, color='red', linestyle='--', linewidth=2, label=f'Offset ({offset}ms)')
     plt.xlabel('Stimulus latency (ms)')
     plt.ylabel('Count')
-    plt.title('Group stimulus distribution by model (all subjects)')
+    title = group_label if group_label else 'Group stimulus distribution by model (all subjects)'
+    plt.title(title)
     plt.legend()
     plt.grid(True, alpha=0.3)
 
@@ -134,7 +136,7 @@ def plot_group_model_histograms(all_rows_list, output_dir, file_prefix, offset):
     print(f"Generated group histograms in {output_dir}")
 
 
-def plot_group_psychometric(all_rows_list, output_dir, file_prefix, offset):
+def plot_group_psychometric(all_rows_list, output_dir, file_prefix, offset, group_label=None):
     """Create group psychometric curve combining data from all subjects."""
 
     # Flatten all rows from all subjects
@@ -180,7 +182,8 @@ def plot_group_psychometric(all_rows_list, output_dir, file_prefix, offset):
     plt.axhline(0.5, color='gray', linestyle=':', alpha=0.5)
     plt.xlabel('Stimulus time (ms)')
     plt.ylabel('P(response = 2)')
-    plt.title('Group psychometric function (all subjects)')
+    title = group_label if group_label else 'Group psychometric function (all subjects)'
+    plt.title(title)
     plt.legend()
     plt.grid(True, alpha=0.3)
 
@@ -189,3 +192,110 @@ def plot_group_psychometric(all_rows_list, output_dir, file_prefix, offset):
     plt.close()
 
     print(f"Generated group psychometric: {plot_filename}")
+
+
+def create_grid_of_plots(plot_files, output_path, title, n_rows=3, n_cols=3, labels=None):
+    """
+    Create a grid of subplots from individual plot files.
+    
+    Args:
+        plot_files: List of file paths to individual plots (in grid order)
+        output_path: Path where to save the combined grid plot
+        title: Title for the combined plot
+        n_rows: Number of rows in the grid
+        n_cols: Number of columns in the grid
+        labels: List of labels for each subplot (e.g., ["PSE_JND", ...])
+    """
+    from PIL import Image, ImageDraw, ImageFont
+    
+    if len(plot_files) != n_rows * n_cols:
+        print(f"Warning: Expected {n_rows * n_cols} plots, got {len(plot_files)}")
+        return
+    
+    # Load all images
+    images = []
+    for plot_file in plot_files:
+        if os.path.exists(plot_file):
+            images.append(Image.open(plot_file))
+        else:
+            print(f"Warning: Plot file not found: {plot_file}")
+            return
+    
+    if len(images) != n_rows * n_cols:
+        print(f"Error: Could not load all {n_rows * n_cols} images")
+        return
+    
+    # Get image dimensions (assume all are the same)
+    img_width, img_height = images[0].size
+    
+    # Add space for labels if provided
+    label_height = 30 if labels else 0
+    
+    # Create grid
+    grid_width = img_width * n_cols
+    grid_height = (img_height + label_height) * n_rows
+    grid_image = Image.new('RGB', (grid_width, grid_height), color='white')
+    
+    # Paste images into grid and add labels
+    draw = ImageDraw.Draw(grid_image)
+    
+    # Try to use a default font, fallback to default if not available
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
+    except:
+        font = ImageFont.load_default()
+    
+    for idx, img in enumerate(images):
+        row = idx // n_cols
+        col = idx % n_cols
+        x = col * img_width
+        y = row * (img_height + label_height)
+        
+        # Paste image
+        grid_image.paste(img, (x, y))
+        
+        # Add label if provided
+        if labels and idx < len(labels):
+            label_y = y + img_height + 5
+            draw.text((x + 10, label_y), labels[idx], fill='black', font=font)
+    
+    # Save grid
+    grid_image.save(output_path)
+    print(f"Generated grid plot: {output_path}")
+
+
+def create_grid_plots_from_groups(group_plot_data, output_dir, model_name, pse_grid, jnd_grid, plot_type='histogram'):
+    """
+    Create a grid of plots from group results.
+    
+    Args:
+        group_plot_data: Dict mapping group_idx to plot file path
+        output_dir: Output directory for the grid plot
+        model_name: Model name for the output filename
+        pse_grid: List of PSE values
+        jnd_grid: List of JND values
+        plot_type: Type of plot ('histogram', 'model_histogram', or 'psychometric')
+    """
+    n_pse = len(pse_grid)
+    n_jnd = len(jnd_grid)
+    
+    # Organize plot files in grid order (PSE on rows, JND on columns)
+    plot_files = []
+    labels = []
+    
+    for pse_idx in range(n_pse):
+        for jnd_idx in range(n_jnd):
+            group_idx = pse_idx * n_jnd + jnd_idx + 1
+            if group_idx in group_plot_data:
+                plot_files.append(group_plot_data[group_idx])
+                pse = pse_grid[pse_idx]
+                jnd = jnd_grid[jnd_idx]
+                labels.append(f"PSE={pse}, JND={jnd}")
+            else:
+                print(f"Warning: No plot data for group {group_idx}")
+                return
+    
+    # Create grid
+    output_path = os.path.join(output_dir, f"{model_name}_grid_{plot_type}.png")
+    title = f"{model_name} - {plot_type} grid"
+    create_grid_of_plots(plot_files, output_path, title, n_rows=n_pse, n_cols=n_jnd, labels=labels)

@@ -49,7 +49,7 @@ class BISADOpyWrapper:
                                     self.min,
                                     self.max,
                                     200),
-            'slope'     : np.logspace(-2, 1, 200)  # 0.01 to 1.0, emphasizes shallow slopes
+            'slope'     : np.logspace(-2, 1, 200)  # 0.01 to 10
         }
 
         self.engine = EnginePsi(self.model, self.designs, self.params)

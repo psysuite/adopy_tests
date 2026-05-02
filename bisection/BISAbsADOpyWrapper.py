@@ -15,7 +15,7 @@ class BISAbsADOpyWrapper(BISADOpyWrapper):
 
         super().__init__(adoparams, taskparams)
 
-        self.exclusion_width    = taskparams.get("exclusion_width", 20)  # Exclude ms around offset
+        self.exclusion_width    = taskparams.get("exclusion_width", 0)  # Exclude ms around offset
         self.pre_offset_nstim   = 0
         self.post_offset_nstim  = 0
 
