@@ -97,35 +97,6 @@ def calculate_stability_from_values(
 
     return 200
 
-
-def calculate_latency_statistics(latencies: np.ndarray) -> Dict[str, float]:
-    """
-    Calculate descriptive statistics for stimulus latencies.
-
-    Args:
-        latencies: Array of stimulus presentation times (milliseconds)
-
-    Returns:
-        Dictionary with keys: mean, std, range, entropy (Shannon, 10 bins)
-    """
-    if len(latencies) == 0:
-        return {'mean': np.nan, 'std': np.nan, 'range': np.nan, 'entropy': np.nan}
-
-    mean = float(np.mean(latencies))
-    std = float(np.std(latencies, ddof=0))
-    lat_range = float(np.max(latencies) - np.min(latencies))
-
-    if len(latencies) > 1 and lat_range > 0:
-        counts, _ = np.histogram(latencies, bins=10)
-        probs = counts / counts.sum()
-        probs = probs[probs > 0]
-        entropy = float(-np.sum(probs * np.log2(probs)))
-    else:
-        entropy = 0.0
-
-    return {'mean': mean, 'std': std, 'range': lat_range, 'entropy': entropy}
-
-
 # ============================================================================
 # region FITTERS
 # ============================================================================

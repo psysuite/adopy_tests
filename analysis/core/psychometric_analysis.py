@@ -17,6 +17,7 @@ import numpy as np
 import logging
 
 from utilities.logging_config import log_subject_error
+from scipy.stats import norm as _scipy_norm
 
 def analyze_subject_results(
     exp,
@@ -403,6 +404,21 @@ def consolidate_results(
         for col in ['subject_id', 'status']:
             if col in df.columns:
                 df = df.drop(columns=[col])
+        
+        # Reorder columns: put core metrics first, then lat_entropy columns
+        core_cols = ['subj', 'mu', 'sigma', 'jnd', 'pse', 'n_trials', 'accuracy',
+                     'asymmetry_index', 'n_before_offset', 'n_after_offset',
+                     'pct_before', 'pct_after']
+        
+        # Get all lat_entropy columns (lat_entropy_40, lat_entropy_60, etc.)
+        lat_entropy_cols = sorted([col for col in df.columns if col.startswith('lat_entropy_')])
+        
+        # Get all other columns (progressive metrics, stimulus metrics, etc.)
+        other_cols = [col for col in df.columns if col not in core_cols and col not in lat_entropy_cols]
+        
+        # Reorder: core + lat_entropy + others
+        ordered_cols = [col for col in core_cols if col in df.columns] + lat_entropy_cols + other_cols
+        df = df[ordered_cols]
 
     excel_filename = f"{file_prefix}_results_summary.xlsx"
     excel_filepath = os.path.join(output_dir, excel_filename)
@@ -695,3 +711,38 @@ def calculate_progressive_stimulus_metrics(rows: List[Dict], trial_counts: List[
         result['bimodality_index'][n_trials] = bimodality
     
     return result
+
+
+def calculate_latency_statistics(latencies: np.ndarray) -> Dict[str, float]:
+    """
+    Calculate descriptive statistics for stimulus latencies.
+    
+    Renamed to match simulation metrics:
+    - stimulus_center (SC): mean of stimulus latencies
+    - stimulus_spread (SS): standard deviation of stimulus latencies
+    - lat_entropy: Shannon entropy of stimulus latency distribution
+    - lat_range: range of stimulus latencies
+
+    Args:
+        latencies: Array of stimulus presentation times (milliseconds)
+
+    Returns:
+        Dictionary with keys: stimulus_center, stimulus_spread, lat_range, lat_entropy (Shannon, 10 bins)
+    """
+    if len(latencies) == 0:
+        return {'stimulus_center': np.nan, 'stimulus_spread': np.nan, 'lat_range': np.nan, 'lat_entropy': np.nan}
+
+    stimulus_center = float(np.mean(latencies))
+    stimulus_spread = float(np.std(latencies, ddof=0))
+    lat_range = float(np.max(latencies) - np.min(latencies))
+
+    if len(latencies) > 1 and lat_range > 0:
+        counts, _ = np.histogram(latencies, bins=10)
+        probs = counts / counts.sum()
+        probs = probs[probs > 0]
+        lat_entropy = float(-np.sum(probs * np.log2(probs)))
+    else:
+        lat_entropy = 0.0
+
+    return {'stimulus_center': stimulus_center, 'stimulus_spread': stimulus_spread, 'lat_range': lat_range, 'lat_entropy': lat_entropy}
+

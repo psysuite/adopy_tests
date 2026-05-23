@@ -25,8 +25,8 @@ def generate_wide_format(results: List[ProgressiveResult],
         - Metadata: subj, age, gender, modality, algorithm, group
         - Parameters: pse_40, pse_60, ..., pse_200
         - Parameters: jnd_40, jnd_60, ..., jnd_200
-        - Statistics: lat_mean_40, ..., lat_mean_200
-        - Statistics: lat_std_40, ..., lat_std_200
+        - Statistics: SC_40, ..., SC_200 (stimulus center)
+        - Statistics: SS_40, ..., SS_200 (stimulus spread)
         - Statistics: lat_range_40, ..., lat_range_200
         - Statistics: lat_entropy_40, ..., lat_entropy_200
         
@@ -62,10 +62,10 @@ def generate_wide_format(results: List[ProgressiveResult],
         
         # Add latency statistics for each trial count
         for N in result.trial_counts:
-            row[f'lat_mean_{N}'] = result.lat_mean.get(N, float('nan'))
+            row[f'SC_{N}'] = result.lat_mean.get(N, float('nan'))
         
         for N in result.trial_counts:
-            row[f'lat_std_{N}'] = result.lat_std.get(N, float('nan'))
+            row[f'SS_{N}'] = result.lat_std.get(N, float('nan'))
         
         for N in result.trial_counts:
             row[f'lat_range_{N}'] = result.lat_range.get(N, float('nan'))
@@ -100,7 +100,7 @@ def generate_long_format(results: List[ProgressiveResult],
         - Metadata: subj, age, gender, modality, algorithm, group
         - Trial count: n_trials
         - Parameters: pse, jnd
-        - Statistics: lat_mean, lat_std, lat_range, lat_entropy
+        - Statistics: SC (stimulus center), SS (stimulus spread), lat_range, lat_entropy
         
     Implementation:
         - Create one row per (subject, trial_count) combination
@@ -126,8 +126,8 @@ def generate_long_format(results: List[ProgressiveResult],
                 'n_trials': N,
                 'pse': result.pse_values.get(N, float('nan')),
                 'jnd': result.jnd_values.get(N, float('nan')),
-                'lat_mean': result.lat_mean.get(N, float('nan')),
-                'lat_std': result.lat_std.get(N, float('nan')),
+                'SC': result.lat_mean.get(N, float('nan')),
+                'SS': result.lat_std.get(N, float('nan')),
                 'lat_range': result.lat_range.get(N, float('nan')),
                 'lat_entropy': result.lat_entropy.get(N, float('nan')),
             }

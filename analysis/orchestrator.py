@@ -16,7 +16,7 @@ from analysis.core.progressive_analyzer import ProgressiveAnalyzer, ProgressiveR
 from analysis.io.converter import convert_psa_to_gbf
 from analysis.io.metadata import extract_metadata, SubjectMetadata
 from analysis.io.report_generator import generate_wide_format, generate_long_format
-from analysis.core.psychometric_helpers import calculate_latency_statistics
+from analysis.core.psychometric_analysis import calculate_latency_statistics
 from analysis.io.fitters import fit_gaussfit
 
 logger = logging.getLogger(__name__)
@@ -100,10 +100,10 @@ def analyze_subject_progressive(filepath: str, method: str = 'logistic',
             first_n_resp = responses[:N]
             
             stats = calculate_latency_statistics(first_n_lat)
-            result_with_meta.lat_mean[N] = stats['mean']
-            result_with_meta.lat_std[N] = stats['std']
-            result_with_meta.lat_range[N] = stats['range']
-            result_with_meta.lat_entropy[N] = stats['entropy']
+            result_with_meta.lat_mean[N] = stats['stimulus_center']
+            result_with_meta.lat_std[N] = stats['stimulus_spread']
+            result_with_meta.lat_range[N] = stats['lat_range']
+            result_with_meta.lat_entropy[N] = stats['lat_entropy']
             
             try:
                 unique_lats = np.unique(first_n_lat)
@@ -121,8 +121,8 @@ def analyze_subject_progressive(filepath: str, method: str = 'logistic',
                     result_with_meta.pse_values[N] = fit_result.pse
                     result_with_meta.jnd_values[N] = fit_result.jnd
                     logger.info(f"  N={N}: PSE={fit_result.pse:.1f}, JND={fit_result.jnd:.1f}, "
-                                f"lat_mean={stats['mean']:.1f}, lat_std={stats['std']:.1f}, "
-                                f"entropy={stats['entropy']:.2f}")
+                                f"SC={stats['stimulus_center']:.1f}, SS={stats['stimulus_spread']:.1f}, "
+                                f"entropy={stats['lat_entropy']:.2f}")
                 else:
                     logger.warning(f"  N={N}: Fitting failed or returned NaN")
             except Exception as e:
