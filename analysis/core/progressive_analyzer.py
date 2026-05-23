@@ -17,8 +17,8 @@ from analysis.core.psychometric_helpers import (
     fit_logistic_psychometric,
     fit_probit_psychometric,
     calculate_stability_from_values,
-    calculate_latency_statistics,
 )
+from analysis.core.psychometric_analysis import calculate_latency_statistics
 
 
 logger = logging.getLogger(__name__)
@@ -130,10 +130,10 @@ class ProgressiveAnalyzer:
 
             # Calculate latency statistics
             stats = calculate_latency_statistics(lat_block)
-            result.lat_mean[block_size] = stats['mean']
-            result.lat_std[block_size] = stats['std']
-            result.lat_range[block_size] = stats['range']
-            result.lat_entropy[block_size] = stats['entropy']
+            result.lat_mean[block_size] = stats['stimulus_center']
+            result.lat_std[block_size] = stats['stimulus_spread']
+            result.lat_range[block_size] = stats['lat_range']
+            result.lat_entropy[block_size] = stats['lat_entropy']
 
             # Fit psychometric curve
             try:

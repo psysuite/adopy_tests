@@ -1,14 +1,129 @@
+"""
+Consolidated plotting module for all plot generation.
+
+Handles:
+- Individual subject plots (histogram, psychometric)
+- Group plots (aggregated histograms, psychometric curves)
+- Grid assembly (3x3 grids of group plots)
+"""
+
 import os
+import sys
 import math
+from pathlib import Path
 
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.stats import norm
 from scipy.optimize import curve_fit
 
-# Plot histogram of stimuli with success/failure coloring
-def plot_stim_hist(rows, filepath, offset, subj):
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from utilities.gbf_helpers import load_gbf_with_success
+
+
+# ============================================================================
+# PSYCHOMETRIC CURVE FITTING
+# ============================================================================
+
+def fit_psychometric_curve(stimuli, responses, offset=500):
+    """
+    Fit cumulative Gaussian psychometric function to binned data.
+    
+    Returns:
+        mu: threshold (PSE)
+        sigma: slope (JND)
+        x_fit: x values for fitted curve
+        y_fit: y values for fitted curve
+        bins_valid: valid bin centers
+        f: proportion correct per bin
+    """
+    if len(stimuli) < 3 or len(np.unique(responses)) < 2:
+        return None, None, None, None, None, None
+    
+    # Bin the data
+    bin_size = 10
+    sr = sorted(list(zip(stimuli, responses)))
+    
+    if len(sr) == 0:
+        return None, None, None, None, None, None
+    
+    bins = [i * bin_size for i in range(math.floor(sr[0][0] / bin_size), 
+                                        math.ceil(sr[-1][0] / bin_size) + 1)]
+    
+    x = np.array([s[0] for s in sr])
+    i_binned = np.digitize(x, bins)
+    x_binned = np.asarray(bins)[i_binned - 1]
+    r = np.asarray([sr_item[1] for sr_item in sr])
+    
+    # Calculate proportion correct per bin
+    f = []
+    bins_valid = []
+    for b in bins:
+        mask = x_binned == b
+        if np.sum(mask) > 0:
+            f.append(np.sum(r[mask]) / np.sum(mask))
+            bins_valid.append(b)
+    
+    if len(f) < 3:
+        return None, None, None, None, None, None
+    
+    f = np.asarray(f)
+    bins_valid = np.asarray(bins_valid)
+    
+    # Fit cumulative Gaussian
+    try:
+        stim_range = max(stimuli) - min(stimuli)
+        p0 = [offset, stim_range / 10]
+        bounds = ([offset - stim_range, 1], [offset + stim_range, stim_range])
+        mu, sigma = curve_fit(norm.cdf, bins_valid, f, p0=p0, bounds=bounds, maxfev=10000)[0]
+    except Exception:
+        return None, None, None, None, None, None
+    
+    # Generate fitted curve
+    x_fit = np.linspace(min(stimuli) - 50, max(stimuli) + 50, 200)
+    y_fit = norm.cdf(x_fit, mu, sigma)
+    
+    return mu, sigma, x_fit, y_fit, bins_valid, f
+
+# ============================================================================
+# GBF FILE HELPERS
+# ============================================================================
+
+def find_gbf_file(group_dir: Path, model_name: str, group_idx: int,
+                  subj_in_group: int, pse: float, jnd: float) -> Path | None:
+    """Find GBF file, trying exact PSE/JND then glob fallback."""
+    pse_int = int(round(pse))
+    jnd_int = int(round(jnd))
+    exact = group_dir / f"S{subj_in_group:02d}_G{group_idx}_{pse_int}_{jnd_int}_{model_name}.txt"
+    if exact.exists():
+        return exact
+    matches = list(group_dir.glob(f"S{subj_in_group:02d}_G{group_idx}_*_{model_name}.txt"))
+    return matches[0] if matches else None
+
+
+def load_group_rows(group_dir: Path, model_name: str, group_idx: int,
+                    pse: float, jnd: float, n_subjects: int, offset: int = 500):
+    """Load all rows for a group from GBF files."""
+    all_rows = []
+    
+    for subj_in_group in range(1, n_subjects + 1):
+        gbf_file = find_gbf_file(group_dir, model_name, group_idx,
+                                 subj_in_group, pse, jnd)
+        if gbf_file is None:
+            continue
+        try:
+            rows = load_gbf_with_success(str(gbf_file), offset)
+            all_rows.extend(rows)
+        except Exception:
+            continue
+    
+    return all_rows
+
+def plot_stim_hist(rows, filepath, offset, subj):
+    """Plot histogram of stimuli with success/failure coloring for a single subject."""
     stimuli = [row['lat'] for row in rows]
     successes = [row['res'] == 'true' for row in rows]
 
@@ -35,8 +150,9 @@ def plot_stim_hist(rows, filepath, offset, subj):
     plt.savefig(plot_filename, bbox_inches='tight', dpi=100)
     plt.close()
 
-def plot_stim_model_hist(rows, filepath, offset, subj):
 
+def plot_stim_model_hist(rows, filepath, offset, subj):
+    """Plot histogram of stimuli by model (pre vs post) for a single subject."""
     stimuli = [row['lat'] for row in rows]
     models = [row['model'] for row in rows]
 
@@ -67,9 +183,12 @@ def plot_stim_model_hist(rows, filepath, offset, subj):
     return filepath
 
 
+# ============================================================================
+# GROUP PLOTS
+# ============================================================================
+
 def plot_group_histograms(all_rows_list, output_dir, file_prefix, offset, group_label=None):
     """Create group histograms combining data from all subjects."""
-
     # Flatten all rows from all subjects
     all_rows = [row for rows in all_rows_list for row in rows]
 
@@ -101,8 +220,9 @@ def plot_group_histograms(all_rows_list, output_dir, file_prefix, offset, group_
     plt.savefig(plot_filename, bbox_inches='tight', dpi=100)
     plt.close()
 
-def plot_group_model_histograms(all_rows_list, output_dir, file_prefix, offset, group_label=None):
 
+def plot_group_model_histograms(all_rows_list, output_dir, file_prefix, offset, group_label=None):
+    """Create group histograms by model (pre vs post) combining data from all subjects."""
     # Flatten all rows from all subjects
     all_rows = [row for rows in all_rows_list for row in rows]
 
@@ -138,46 +258,29 @@ def plot_group_model_histograms(all_rows_list, output_dir, file_prefix, offset, 
 
 def plot_group_psychometric(all_rows_list, output_dir, file_prefix, offset, group_label=None):
     """Create group psychometric curve combining data from all subjects."""
-
     # Flatten all rows from all subjects
     all_rows = [row for rows in all_rows_list for row in rows]
 
     stimuli = [row['lat'] for row in all_rows]
-    responses = [row['user_ans'] for row in all_rows]  # Use user_ans (0 or 1), not res (success/failure)
+    responses = [row['user_ans'] for row in all_rows]  # Use user_ans (0 or 1)
 
     if len(stimuli) == 0:
         print("No data to plot group psychometric")
         return
 
-    # Bin the data
-    binSize = 10
-    SR = sorted(list(zip(stimuli, responses)))
-    bins = [i * binSize for i in range(math.floor(SR[0][0] / binSize), math.ceil(SR[-1][0] / binSize) + 1)]
-    x = [s[0] for s in SR]
-    i_binned = np.digitize(x, bins)
-    x_binned = np.asarray(bins)[i_binned - 1]
-    r = np.asarray([sr[1] for sr in SR])
-    f = [sum(r[x_binned == b]) / len(r[x_binned == b]) if len(r[x_binned == b]) > 0 else math.nan for b in bins]
-    goodx = [not math.isnan(y) for y in f]
-    f = np.asarray(f)[goodx]
-    bins = np.asarray(bins)[goodx]
+    # Fit psychometric curve
+    result = fit_psychometric_curve(stimuli, responses, offset=offset)
+    if result[0] is None:
+        print(f"Could not fit psychometric curve for {file_prefix}")
+        return
 
-    # Fit cumulative Gaussian
-    try:
-        stim_range = max(stimuli) - min(stimuli)
-        p0 = [offset, stim_range / 10]
-        bounds = ([offset - stim_range, 1], [offset + stim_range, stim_range])
-        mu1, sigma1 = curve_fit(norm.cdf, bins, f, p0=p0, bounds=bounds, maxfev=10000)[0]
-    except Exception as e:
-        print(f"Group psychometric fit failed: {e}")
-        mu1 = np.mean(stimuli)
-        sigma1 = np.std(stimuli)
+    mu, sigma, x_fit, y_fit, bins_valid, f = result
+    jnd = sigma * 0.6745  # Convert sigma to JND
 
     # Plot
     plt.figure(figsize=(10, 6))
-    x_fit = np.linspace(min(stimuli) - 50, max(stimuli) + 50, 200)
-    plt.plot(x_fit, norm.cdf(x_fit, mu1, sigma1), 'b-', linewidth=2, alpha=0.7, label=f'Fit: μ={mu1:.1f}, σ={sigma1:.1f}')
-    plt.plot(bins, f, 'ro', markersize=8, alpha=0.7, label='Data')
+    plt.plot(x_fit, y_fit, 'b-', linewidth=2, alpha=0.7, label=f'Fit: μ={mu:.1f}, JND={jnd:.1f}')
+    plt.plot(bins_valid, f, 'ro', markersize=8, alpha=0.7, label='Data')
     plt.axvline(offset, color='g', linestyle='--', linewidth=2, label=f'True threshold ({offset}ms)')
     plt.axhline(0.5, color='gray', linestyle=':', alpha=0.5)
     plt.xlabel('Stimulus time (ms)')
@@ -192,6 +295,57 @@ def plot_group_psychometric(all_rows_list, output_dir, file_prefix, offset, grou
     plt.close()
 
     print(f"Generated group psychometric: {plot_filename}")
+
+
+# ============================================================================
+# GRID ASSEMBLY
+# ============================================================================
+
+def plot_generic_grid(model_name: str, group_data: dict, pse_grid: list, jnd_grid: list,
+                      output_dir: Path, plot_func, plot_func_kwargs=None, grid_filename_suffix=''):
+    """
+    Generic grid assembly function.
+    
+    Args:
+        model_name: Model identifier
+        group_data: Dict mapping (pse, jnd) to data dict
+        pse_grid: List of PSE values
+        jnd_grid: List of JND values
+        output_dir: Output directory
+        plot_func: Function to call for each subplot (receives ax, data_entry, pse, jnd, **kwargs)
+        plot_func_kwargs: Additional kwargs to pass to plot_func
+        grid_filename_suffix: Suffix for output filename (e.g., 'psychometric', 'stimulus_distribution')
+    """
+    if plot_func_kwargs is None:
+        plot_func_kwargs = {}
+    
+    n_pse = len(pse_grid)
+    n_jnd = len(jnd_grid)
+
+    fig, axes = plt.subplots(n_pse, n_jnd, figsize=(8 * n_jnd, 5.5 * n_pse))
+    fig.suptitle(
+        f'{model_name} — {grid_filename_suffix}\n'
+        f'(rows = PSE, cols = JND)',
+        fontsize=13, fontweight='bold', y=1.01
+    )
+
+    for pse_idx, pse in enumerate(pse_grid):
+        for jnd_idx, jnd in enumerate(jnd_grid):
+            ax = axes[pse_idx][jnd_idx] if n_pse > 1 else axes[jnd_idx]
+            key = (pse, jnd)
+
+            if key not in group_data:
+                ax.set_visible(False)
+                continue
+
+            entry = group_data[key]
+            plot_func(ax=ax, data_entry=entry, pse=pse, jnd=jnd, **plot_func_kwargs)
+
+    plt.tight_layout()
+    out_path = output_dir / f"{model_name}_grid_{grid_filename_suffix}.png"
+    plt.savefig(out_path, dpi=100, bbox_inches='tight')
+    plt.close()
+    print(f"    ✓ Grid saved: {out_path.name}")
 
 
 def create_grid_of_plots(plot_files, output_path, title, n_rows=3, n_cols=3, labels=None):

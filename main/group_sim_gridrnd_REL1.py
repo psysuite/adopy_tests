@@ -38,9 +38,12 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from analysis.core.simulation_engine import SimulationEngine
-from utilities.plotting import plot_group_histograms, plot_group_psychometric, create_grid_plots_from_groups
+from analysis.core.plotting import plot_group_histograms, plot_group_psychometric, create_grid_plots_from_groups
 from analysis.core.psychometric_analysis import consolidate_results, add_group_stats_to_excel
-from analysis.core.plot_analysis_metrics import plot_analysis_metrics
+from analysis.core.generate_analysis_plots import generate_all_analysis
+from analysis.core.generate_analysis_data import generate_all_data
+from analysis.core.plot_psychometric_curves import plot_psychometric_for_model
+from analysis.core.plot_stimulus_distribution import plot_stimulus_for_model
 from utilities.multithreading_utils import (
     SubjectSimulationTask,
     MultiThreadedSimulationRunner,
@@ -171,7 +174,7 @@ def main():
                 analysis_tasks_to_run.append((gbf_rows, subj, result_dict, rows, offset))
 
         if analysis_tasks_to_run:
-            analysis_results = runner.run_progressive_analyses(analysis_tasks_to_run, verbose=True)
+            analysis_results = runner.run_progressive_analyses(analysis_tasks_to_run, verbose=True, gamma=ADO_PARAMS["guess_rate"], lapse=ADO_PARAMS["lapse_rate"])
 
             for subj, (updated_dict, error_msg) in analysis_results.items():
                 if error_msg:
@@ -205,16 +208,39 @@ def main():
 
     print(f"Done. {total_subjects} subjects across {len(grid)} groups")
 
-    # ====== PHASE 5: Create grid plots ======
-    print(f"\nPhase 5: Creating grid plots...")
+    # ====== PHASE 5: Generate analysis data (Excel columns) ======
+    print(f"\nPhase 5: Generating analysis data (Excel columns)...")
+    generate_all_data(
+        model_name=MODEL_NAME,
+        output_dir=output_dir,
+        pse_grid=PSE_GRID,
+        jnd_grid=JND_GRID,
+        offset=OFFSET
+    )
+
+    # ====== PHASE 6: Create grid plots ======
+    print(f"\nPhase 6: Creating grid plots...")
     if histogram_plots:
         create_grid_plots_from_groups(histogram_plots, str(output_dir), MODEL_NAME, PSE_GRID, JND_GRID, 'histogram')
     if psychometric_plots:
         create_grid_plots_from_groups(psychometric_plots, str(output_dir), MODEL_NAME, PSE_GRID, JND_GRID, 'psychometric')
 
-    # ====== PHASE 6: Generate analysis metric plots ======
-    print(f"\nPhase 6: Generating analysis metric plots...")
-    plot_analysis_metrics(MODEL_NAME, output_dir, PSE_GRID, JND_GRID)
+    # ====== PHASE 7: Generate group plots (psychometric + stimulus distribution) ======
+    print(f"\nPhase 7: Generating group plots...")
+    plot_psychometric_for_model(MODEL_NAME)
+    plot_stimulus_for_model(MODEL_NAME)
+
+    # ====== PHASE 8: Generate analysis metric plots and export CSV ======
+    print(f"\nPhase 8: Generating analysis metric plots and exporting CSV...")
+    generate_all_analysis(
+        model_name=MODEL_NAME,
+        output_dir=output_dir,
+        pse_grid=PSE_GRID,
+        jnd_grid=JND_GRID,
+        export_csv=True,
+        csv_output_dir=Path(__file__).parent.parent / "data" / "output" / "stimulus_metrics_for_r",
+        data_root=Path(__file__).parent.parent / "data" / "output" / "sim_gridrnd"
+    )
 
     print(f"All done!")
 

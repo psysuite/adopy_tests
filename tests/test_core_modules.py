@@ -6,7 +6,7 @@ import tempfile
 import os
 from postprocessing.modules.parser import parse_data_file, TrialData
 from postprocessing.modules.metadata import extract_metadata, SubjectMetadata
-from utilities.psychometric_helpers import calculate_latency_statistics
+from analysis.core.psychometric_analysis import calculate_latency_statistics
 
 
 def test_parser_imports():

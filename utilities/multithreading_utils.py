@@ -118,6 +118,8 @@ def run_progressive_analysis_task(
     result_dict: Dict,
     rows: List[Dict] = None,
     offset: float = 500,
+    gamma: float = 0.0,
+    lapse: float = 0.0,
 ) -> Tuple[str, Dict, str]:
     """
     Run progressive analysis for a subject in a thread.
@@ -126,6 +128,7 @@ def run_progressive_analysis_task(
     - Progressive PSE/JND at trial counts: 40, 60, 80, ..., 200
     - Progressive asymmetry index at same trial counts
     - Progressive stimulus distribution metrics (center, spread, bimodality)
+    - Progressive Fisher Information for PSE and slope at same trial counts
     
     Args:
         gbf_rows: List of GBF row dictionaries
@@ -133,6 +136,8 @@ def run_progressive_analysis_task(
         result_dict: Result dictionary to update
         rows: List of trial dicts with 'lat' key for asymmetry/stimulus metrics
         offset: Offset latency for asymmetry calculation (default 500ms)
+        gamma: Guess rate of the psychometric model (default 0.0)
+        lapse: Lapse rate of the psychometric model (default 0.0)
         
     Returns:
         Tuple of (subject_id, updated_result_dict, error_message or None)
@@ -140,9 +145,9 @@ def run_progressive_analysis_task(
     from analysis.core.progressive_analyzer import ProgressiveAnalyzer
     from analysis.core.psychometric_analysis import (
         calculate_progressive_asymmetry,
-        calculate_progressive_stimulus_metrics,
+        calculate_progressive_stimulus_metrics
     )
-    
+    import numpy as np
     error_msg = None
     try:
         # Save GBF file temporarily
@@ -155,40 +160,41 @@ def run_progressive_analysis_task(
         analyzer = ProgressiveAnalyzer()
         prog_result = analyzer.run_progressive_analysis(temp_gbf_path, method='logistic')
         
-        # Add progressive PSE/JND values to result_dict
+        # Add progressive PSE/JND values to result_dict (rounded to 2 decimals)
         for N in prog_result.trial_counts:
-            result_dict[f'pse_{N}'] = prog_result.pse_values.get(N)
-            result_dict[f'jnd_{N}'] = prog_result.jnd_values.get(N)
+            pse_val = prog_result.pse_values.get(N)
+            jnd_val = prog_result.jnd_values.get(N)
+            lat_ent_val = prog_result.lat_entropy.get(N)
+            
+            result_dict[f'pse_{N}'] = round(pse_val, 2) if pse_val is not None and np.isfinite(pse_val) else pse_val
+            result_dict[f'jnd_{N}'] = round(jnd_val, 2) if jnd_val is not None and np.isfinite(jnd_val) else jnd_val
+            result_dict[f'lat_entropy_{N}'] = round(lat_ent_val, 2) if lat_ent_val is not None and np.isfinite(lat_ent_val) else lat_ent_val
         
         # Calculate progressive asymmetry (if rows provided)
         if rows:
             prog_asymmetry = calculate_progressive_asymmetry(rows, offset)
             for n_trials, asym_idx in prog_asymmetry.items():
-                result_dict[f'asymmetry_{n_trials}'] = asym_idx
+                result_dict[f'asymmetry_{n_trials}'] = round(asym_idx, 2) if asym_idx is not None and np.isfinite(asym_idx) else asym_idx
         
         # Calculate progressive stimulus metrics (if rows provided)
         if rows:
             prog_stimulus = calculate_progressive_stimulus_metrics(rows)
             
-            # Add stimulus center metrics
+            # Add stimulus center metrics (rounded to 2 decimals)
             for n_trials, value in prog_stimulus['stimulus_center'].items():
-                result_dict[f'stimulus_center_{n_trials}'] = value
+                result_dict[f'stimulus_center_{n_trials}'] = round(value, 2) if value is not None and np.isfinite(value) else value
             
-            # Add stimulus spread metrics
+            # Add stimulus spread metrics (rounded to 2 decimals)
             for n_trials, value in prog_stimulus['stimulus_spread'].items():
-                result_dict[f'stimulus_spread_{n_trials}'] = value
+                result_dict[f'stimulus_spread_{n_trials}'] = round(value, 2) if value is not None and np.isfinite(value) else value
             
-            # Add stimulus min metrics
+            # Add stimulus min metrics (rounded to 2 decimals)
             for n_trials, value in prog_stimulus['stimulus_min'].items():
-                result_dict[f'stimulus_min_{n_trials}'] = value
+                result_dict[f'stimulus_min_{n_trials}'] = round(value, 2) if value is not None and np.isfinite(value) else value
             
-            # Add stimulus max metrics
+            # Add stimulus max metrics (rounded to 2 decimals)
             for n_trials, value in prog_stimulus['stimulus_max'].items():
-                result_dict[f'stimulus_max_{n_trials}'] = value
-            
-            # Add bimodality index metrics
-            for n_trials, value in prog_stimulus['bimodality_index'].items():
-                result_dict[f'bimodality_index_{n_trials}'] = value
+                result_dict[f'stimulus_max_{n_trials}'] = round(value, 2) if value is not None and np.isfinite(value) else value
         
         # Clean up temp file
         os.unlink(temp_gbf_path)
@@ -369,15 +375,20 @@ class MultiThreadedSimulationRunner:
         self,
         analysis_tasks: List[Tuple[List[Dict], str, Dict, List[Dict], float]],
         verbose: bool = True,
+        gamma: float = 0.0,
+        lapse: float = 0.0,
     ) -> Dict[str, Tuple[Dict, str]]:
         """
         Run progressive analyses in parallel.
         
-        Calculates PSE/JND, asymmetry index, and stimulus distribution metrics.
+        Calculates PSE/JND, asymmetry index, stimulus distribution metrics,
+        and Fisher Information (using gamma/lapse for the correct FI model).
         
         Args:
             analysis_tasks: List of (gbf_rows, subj, result_dict, rows, offset) tuples
             verbose: Whether to print progress
+            gamma: Guess rate of the psychometric model (default 0.0)
+            lapse: Lapse rate of the psychometric model (default 0.0)
             
         Returns:
             Dictionary mapping subj to (updated_result_dict, error_message)
@@ -386,7 +397,10 @@ class MultiThreadedSimulationRunner:
         
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {
-                executor.submit(run_progressive_analysis_task, gbf_rows, subj, res_dict, rows, offset): subj
+                executor.submit(
+                    run_progressive_analysis_task,
+                    gbf_rows, subj, res_dict, rows, offset, gamma, lapse
+                ): subj
                 for gbf_rows, subj, res_dict, rows, offset in analysis_tasks
             }
             
