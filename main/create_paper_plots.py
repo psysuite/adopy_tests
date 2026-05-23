@@ -28,7 +28,10 @@ JND_GRID = [20, 40, 60]
 OFFSET = 500
 COLORS = {"ABS1": "#1f77b4", "REL1": "#ff7f0e", "REL2": "#2ca02c"}
 
-
+f3 = "Figure3.png"
+f5 = "Figure5.png"
+f7 = "Figure7.png"
+input_file = "/data/CODE/python/adopy_tests/R/indata/results_BIS_fx_vs_ad_td_2model_rel_logistic_prog_long.xlsx"
 
 def load_group_data(model_name, pse, jnd):
     """Load all GBF data for a group."""
@@ -81,15 +84,15 @@ def fit_and_plot_psychometric(ax, stimuli, responses, model_name):
             label=f'{model_name} (JND={jnd:.1f})')
     ax.plot(bins, f, 'o', color=COLORS[model_name], markersize=3.5, alpha=0.6)
 
-def create_grid_psychometric():
+def create_grid_psychometric(output_filename="grid_psychometric.png"):
     """Create 3x3 grid - publication ready (16cm x 16cm)."""
     script_dir = Path(__file__).parent.parent
-    output_dir = script_dir / "data" / "output" / "paper_plots"
+    output_dir = script_dir / "data" / "paper_plots"
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Convert cm to inches: 16 cm = 6.3 inches
     fig, axes = plt.subplots(3, 3, figsize=(6.3, 6.3), dpi=300)
-    fig.suptitle('Psychometric Functions by PSE/JND Grid', fontsize=11, fontweight='bold', y=0.98)
+    fig.suptitle('Psychometric Functions by PSE/JND', fontsize=11, fontweight='bold', y=0.98)
     
     grid = list(product(PSE_GRID, JND_GRID))
     
@@ -122,20 +125,20 @@ def create_grid_psychometric():
         ax.tick_params(labelsize=6.5)
     
     plt.tight_layout()
-    output_path = output_dir / "grid_psychometric.png"
+    output_path = output_dir / output_filename
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     print(f"✓ Saved: {output_path}")
     plt.close()
 
-def create_latency_envelope_grid():
+def create_latency_envelope_grid(output_filename="grid_latency_envelope.png"):
     """Create 3x3 grid of latency KDE envelopes by PSE/JND - publication ready (16cm x 16cm)."""
     script_dir = Path(__file__).parent.parent
-    output_dir = script_dir / "data" / "output" / "paper_plots"
+    output_dir = script_dir / "data" / "paper_plots"
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Convert cm to inches: 16 cm = 6.3 inches
     fig, axes = plt.subplots(3, 3, figsize=(6.3, 5.0), dpi=300)
-    fig.suptitle('Latencies distribution by PSE/JND', fontsize=11, fontweight='bold', y=0.98)
+    fig.suptitle('Stimuli Latencies distribution by PSE/JND', fontsize=11, fontweight='bold', y=0.98)
     
     grid = list(product(PSE_GRID, JND_GRID))
     
@@ -200,24 +203,27 @@ def create_latency_envelope_grid():
                framealpha=0.95, bbox_to_anchor=(0.5, 0.95))
     
     plt.tight_layout(rect=[0, 0, 1, 0.97])
-    output_path = output_dir / "grid_latency_envelope.png"
+    output_path = output_dir / output_filename
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     print(f"✓ Saved: {output_path}")
     plt.close()
 
-def create_latency_distribution_grid():
+def create_latency_distribution_grid(input_dir=None, output_filename="latency_distribution_grid.png"):
     """Create 2x2 grid of latency distributions by modality and algorithm with stacked success coloring."""
     script_dir = Path(__file__).parent.parent
-    data_dir = script_dir / "data" / "input" / "expdata"
-    output_dir = script_dir / "data" / "output" / "paper_plots"
+    if input_dir is None:
+        input_dir = script_dir / "data" / "input" / "expdata"
+    else:
+        input_dir = Path(input_dir)
+    output_dir = script_dir / "data" / "paper_plots"
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Find all real data files
-    pattern = str(data_dir / "*.txt")
+    pattern = str(input_dir / "*.txt")
     files = sorted(glob.glob(pattern))
     
     if not files:
-        print(f"WARNING: No data files found in {data_dir}")
+        print(f"WARNING: No data files found in {input_dir}")
         return None
     
     # Organize data by modality and algorithm (store both latencies and successes)
@@ -314,26 +320,33 @@ def create_latency_distribution_grid():
         ax.legend(fontsize=9, loc='upper left')
     
     plt.tight_layout()
-    output_path = output_dir / "latency_distribution_grid.png"
+    output_path = output_dir / output_filename
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     print(f"✓ Saved: {output_path}")
     plt.close()
     
     return data_by_condition
 
-def create_figure7_combined():
+def create_figure7_combined(input_dir=None, excel_path=None, output_filename="Figure7_combined.png"):
     """Create combined Figure 7: latency distribution (left 2x2) + entropy evolution (right 2x1)."""
     script_dir = Path(__file__).parent.parent
-    data_dir = script_dir / "data" / "input" / "expdata"
-    output_dir = script_dir / "data" / "output" / "paper_plots"
+    if input_dir is None:
+        input_dir = script_dir / "data" / "input" / "expdata"
+    else:
+        input_dir = Path(input_dir)
+    if excel_path is None:
+        excel_path = script_dir / "data" / "input" / "results_BIS_fx_vs_ad_td_2model_rel_logistic_prog_long.xlsx"
+    else:
+        excel_path = Path(excel_path)
+    output_dir = script_dir / "data" / "paper_plots"
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Find all real data files for latency distribution
-    pattern = str(data_dir / "*.txt")
+    pattern = str(input_dir / "*.txt")
     files = sorted(glob.glob(pattern))
     
     if not files:
-        print(f"WARNING: No data files found in {data_dir}")
+        print(f"WARNING: No data files found in {input_dir}")
         return
     
     # Organize data by modality and algorithm
@@ -371,7 +384,6 @@ def create_figure7_combined():
     
     # Load real data from Excel (progressive format with n_trials)
     import pandas as pd
-    excel_path = script_dir / "data" / "input" / "results_BIS_fx_vs_ad_td_2model_rel_logistic_prog_long.xlsx"
     
     df_real = None
     if excel_path.exists():
@@ -519,7 +531,7 @@ def create_figure7_combined():
             if modality == 'Auditory':
                 ax.legend(fontsize=7, loc='best')
     
-    output_path = output_dir / "Figure7_combined.png"
+    output_path = output_dir / output_filename
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     print(f"✓ Saved: {output_path}")
     plt.close()
@@ -527,143 +539,13 @@ def create_figure7_combined():
 def main():
     print("Creating publication-ready plots...\n")
     print("Generating grid psychometric plot...")
-    create_grid_psychometric()
+    create_grid_psychometric(output_filename=f3)
     
     print("\nGenerating latency envelope grid...")
-    create_latency_envelope_grid()
-    
-    print("\nGenerating latency distribution grid...")
-    create_latency_distribution_grid()
+    create_latency_envelope_grid(output_filename=f5)
     
     print("\nGenerating combined Figure 7...")
-    create_figure7_combined()
-    
-    # ==============================================================================
-    # FIGURE 3: Grid Psychometric
-    # ==============================================================================
-    print("\nCopying Figure 3 (Grid Psychometric)...")
-    script_dir = Path(__file__).parent.parent
-    paper_plots_dir = script_dir / "data" / "output" / "paper_plots"
-    r_output_dir = Path("/data/Dropbox/RDATA/R_bis_ad_fx/results_model_comparison/plots")
-    r_output_dir.mkdir(parents=True, exist_ok=True)
-    
-    grid_psychometric_src = paper_plots_dir / "grid_psychometric.png"
-    grid_psychometric_dst = r_output_dir / "Figure3.png"
-    
-    if grid_psychometric_src.exists():
-        import shutil
-        shutil.copy(str(grid_psychometric_src), str(grid_psychometric_dst))
-        print(f"✓ Saved: {grid_psychometric_dst}")
-    else:
-        print(f"WARNING: {grid_psychometric_src} not found")
-
-    # ==============================================================================
-    # FIGURE 5: Latency Envelope Grid
-    # ==============================================================================
-    print("\nCopying Figure 5 (Latency Envelope Grid)...")
-    
-    grid_latency_envelope_src = paper_plots_dir / "grid_latency_envelope.png"
-    grid_latency_envelope_dst = r_output_dir / "Figure5.png"
-    
-    if grid_latency_envelope_src.exists():
-        import shutil
-        shutil.copy(str(grid_latency_envelope_src), str(grid_latency_envelope_dst))
-        print(f"✓ Saved: {grid_latency_envelope_dst}")
-    else:
-        print(f"WARNING: {grid_latency_envelope_src} not found")
-
-
-    # ==============================================================================
-    # FIGURE S1: Models Stimuli Distribution (REL1/REL2 top, ABS1 centered bottom)
-    # ==============================================================================
-    grid_abs1_path = script_dir / "data" / "output" / "sim_gridrnd" / "ABS1" / "ABS1_stimulus_distribution_grid.png"
-    grid_rel1_path = script_dir / "data" / "output" / "sim_gridrnd" / "REL1" / "REL1_stimulus_distribution_grid.png"
-    grid_rel2_path = script_dir / "data" / "output" / "sim_gridrnd" / "REL2" / "REL2_stimulus_distribution_grid.png"
-
-    print("\nCreating Figure S1 (Models Stimuli Distribution - REL top, ABS1 centered)...")
-    
-    if grid_abs1_path.exists() and grid_rel1_path.exists() and grid_rel2_path.exists():
-        img_abs1 = Image.open(grid_abs1_path)
-        img_rel1 = Image.open(grid_rel1_path)
-        img_rel2 = Image.open(grid_rel2_path)
-
-        yspace = 150
-
-        # Keep all images at same size (no scaling)
-        # Arrange: REL1 and REL2 side by side on top, ABS1 centered below
-        total_width = img_rel1.width + img_rel2.width
-        total_height = img_rel1.height + img_abs1.height + 150  # Extra space for title
-        
-        # Create combined image at 300 DPI
-        combined = Image.new('RGB', (total_width, total_height), color='white')
-        
-        # Paste REL1 and REL2 side by side at top
-        combined.paste(img_rel1, (0, yspace))
-        combined.paste(img_rel2, (img_rel1.width, yspace))
-        
-        # Paste ABS1 centered at bottom
-        abs_x = (total_width - img_abs1.width) // 2
-        combined.paste(img_abs1, (abs_x, yspace + img_rel1.height))
-        
-        # Add title and model subtitles
-        from PIL import ImageDraw, ImageFont
-        draw = ImageDraw.Draw(combined)
-        try:
-            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 50)
-            font_subtitle = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
-        except:
-            font_title = ImageFont.load_default()
-            font_subtitle = ImageFont.load_default()
-        
-        # Main title
-        title = "Models Stimuli Distribution"
-        bbox = draw.textbbox((0, 0), title, font=font_title)
-        text_width = bbox[2] - bbox[0]
-        x = (total_width - text_width) // 2
-        draw.text((x, 40), title, fill='black', font=font_title)
-        
-        # Model subtitles - centered above each subplot
-        # REL1 centered above its subplot
-        rel1_text = "REL1"
-        bbox = draw.textbbox((0, 0), rel1_text, font=font_subtitle)
-        text_width = bbox[2] - bbox[0]
-        x = (img_rel1.width - text_width) // 2
-        draw.text((x, 100), rel1_text, fill='black', font=font_subtitle)
-        
-        # REL2 centered above its subplot
-        rel2_text = "REL2"
-        bbox = draw.textbbox((0, 0), rel2_text, font=font_subtitle)
-        text_width = bbox[2] - bbox[0]
-        x = img_rel1.width + (img_rel2.width - text_width) // 2
-        draw.text((x, 100), rel2_text, fill='black', font=font_subtitle)
-        
-        # ABS1 centered above its subplot
-        abs1_text = "ABS1"
-        bbox = draw.textbbox((0, 0), abs1_text, font=font_subtitle)
-        text_width = bbox[2] - bbox[0]
-        x = abs_x + (img_abs1.width - text_width) // 2
-        draw.text((x, 100 + img_rel1.height), abs1_text, fill='black', font=font_subtitle)
-        
-        figureS1_path = r_output_dir / "FigureS1.png"
-        combined.save(figureS1_path, dpi=(300, 300))
-        print(f"✓ Saved: {figureS1_path}")
-    else:
-        print("WARNING: Could not create Figure S1 - missing grid images")
-    
-    # ==============================================================================
-    # FIGURE 7: Combined Latency Distribution and Entropy Evolution
-    # ==============================================================================
-    print("\nCopying Figure 7 (Combined)...")
-    
-    figure7_combined_src = paper_plots_dir / "Figure7_combined.png"
-    figure7_combined_dst = r_output_dir / "Figure7.png"
-    
-    if figure7_combined_src.exists():
-        import shutil
-        shutil.copy(str(figure7_combined_src), str(figure7_combined_dst))
-        print(f"✓ Saved: {figure7_combined_dst}")
-    else:
-        print(f"WARNING: {figure7_combined_src} not found")
+    create_figure7_combined(excel_path=input_file,  output_filename=f7)
     
     print("\nDone!")
 

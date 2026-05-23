@@ -31,7 +31,7 @@ JND_GRID = [20, 40, 60]
 OFFSET = 500
 
 DATA_ROOT = Path(__file__).parent.parent / 'data' / 'output' / 'sim_gridrnd'
-CSV_OUTPUT_DIR = Path(__file__).parent.parent / 'data' / 'output' / 'stimulus_metrics_for_r'
+CSV_OUTPUT_DIR = Path(__file__).parent.parent / 'R' / 'indata'
 
 
 def main():

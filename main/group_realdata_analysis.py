@@ -27,7 +27,7 @@ PSA_INPUT_DIR = "/data/CODE/python/adopy_tests/data/input/expdata"
 GBF_OUTPUT_DIR = "/data/CODE/python/adopy_tests/data/input/expdata/gbf"
 
 # Output: Excel results
-RESULTS_OUTPUT_DIR = "/data/CODE/python/adopy_tests/data/input/expdata"
+RESULTS_OUTPUT_DIR = "/data/CODE/python/adopy_tests/R/indata"
 
 # Project name (used in output filenames)
 PROJECT_NAME = "BIS_fx_vs_ad_td_2model_rel"

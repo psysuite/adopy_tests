@@ -1,0 +1,5 @@
+modality,algorithm,n,pse_stab_mean,pse_stab_sd,pse_stab_median,jnd_stab_mean,jnd_stab_sd,jnd_stab_median
+Auditory,Adaptive,10,40,0,40,48,13.98411797560202,40
+Auditory,Fixed,10,42,6.324555320336759,40,98,42.63540521418528,100
+Visual,Adaptive,10,40,0,40,64,18.37873166945363,60
+Visual,Fixed,10,40,0,40,98,43.66539438350084,80

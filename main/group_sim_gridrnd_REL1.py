@@ -238,7 +238,7 @@ def main():
         pse_grid=PSE_GRID,
         jnd_grid=JND_GRID,
         export_csv=True,
-        csv_output_dir=Path(__file__).parent.parent / "data" / "output" / "stimulus_metrics_for_r",
+        csv_output_dir=Path(__file__).parent.parent / 'R' / 'indata',
         data_root=Path(__file__).parent.parent / "data" / "output" / "sim_gridrnd"
     )
 
