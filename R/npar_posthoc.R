@@ -32,7 +32,7 @@ npar_ph_pairwise <- function(df, response_var, group_var, corr="fdr") {
 # ============================================================================================== = 
 # run non parametric ANOVA and its posthoc
 # ============================================================================================== = 
-do_npar_anova_phpw <- function(df, splitfactor, resp_var, factor_var, corr="fdr") {
+do_npar_anova_phpw <- function(df, splitfactor, resp_var, factor_var, corr="fdr", do_pwcomp=TRUE) {
   
   df_split  <- split(df, df[[splitfactor]])
   anovas    <- run_lapply_npar_ph_anova(df_split, resp_var, factor_var)
@@ -54,6 +54,10 @@ do_npar_anova_phpw <- function(df, splitfactor, resp_var, factor_var, corr="fdr"
       print(paste0("in ", split_level, " (H=", anovas[[id]]$statistic, ", p=", corrpvalues[id], ")"))
       sign_res[[split_level]] <- list("anova_pvalues"=corrpvalues[id], "ph"=npar_ph_pairwise(df_filtered, resp_var, factor_var, corr))
       pvalues <- sign_res[[split_level]]$ph$p.adjust
+      
+      if(do_pwcomp == FALSE ){
+        return
+      }
       iid <- 0
       for(pv in pvalues){
         iid <- iid + 1
@@ -94,8 +98,7 @@ do_npar_anova_main <- function(df, resp_var, factor_var, corr="fdr") {
   
   anova_result <- npar_ph_anova(df, resp_var, factor_var)
   
-  print(paste0("Main effect: ", resp_var, " ~ ", factor_var))
-  print(paste0("H = ", round(anova_result$statistic, 4), ", p = ", round(anova_result$p.value, 4)))
+  print(paste0("Main effect: ", resp_var, " ~ ", factor_var, ", H = ", round(anova_result$statistic, 4), ", p = ", round(anova_result$p.value, 4)))
   
   if(anova_result$p.value < 0.05) {
     print("SIGNIFICANT - Running pairwise comparisons...")

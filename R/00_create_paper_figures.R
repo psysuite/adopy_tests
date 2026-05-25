@@ -16,21 +16,23 @@ cat("===========================================================================
 # ============================================================================== =
 # SETUP
 # ============================================================================== =
-
-root_dir <- "/data/Dropbox/RDATA/"
-project_name <- "R_bis_ad_fx"
+root_dir <- "/data/CODE/python/adopy_tests/"
+project_name <- "R"
 project_dir <- paste0(root_dir, project_name, "/")
+indata_dir  <- paste0(root_dir, project_name, "/indata/")
 sim_results_filepath <- paste0(project_dir, "results_simulations")
 real_results_filepath <- paste0(project_dir, "results_real_logistic")
-
-# Output directory for paper plots
-paper_plots_dir <- "/data/CODE/python/adopy_tests/data/paper_plots"
-dir.create(paper_plots_dir, recursive = TRUE, showWarnings = FALSE)
+paper_plots_dir <- paste0(root_dir, "data/paper_plots/")
 
 setwd(project_dir)
 
-# CSV input from Python simulation
-sim_results_data_input <- "/data/CODE/python/adopy_tests/R/indata/stimulus_metrics_all_models.csv"
+# Create output directory
+dir.create(file.path(sim_results_filepath, "plots"), recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path(real_results_filepath, "plots"), recursive = TRUE, showWarnings = FALSE)
+
+
+sim_results_data_input <- paste0(indata_dir, "stimulus_metrics_all_models.csv")
+
 # ============================================================================== =
 # SIMULATION DATA FIGURES
 # ============================================================================== =
@@ -289,9 +291,10 @@ p_figure4 <- (title_accuracy | title_convergence) /
     theme = theme(plot.title = element_text(face = "bold", size = 13, hjust = 0.5))
   )
 
-ggsave(file.path(paper_plots_dir, "Figure4.png"),
-       p_figure4, width = 32, height = 14.5, dpi = 300, units = "cm")
-cat("✓ Saved: Figure4.png\n")
+ggsave(file.path(paper_plots_dir, "Figure4.tif"),
+       p_figure4, width = 32, height = 14.5, dpi = 300, units = "cm",
+       compression = "lzw")
+cat("✓ Saved: Figure4.tif\n")
 
 # ============================================================================== =
 # FIGURE 6: Combined Analysis Metrics ====
@@ -473,9 +476,10 @@ p_figure6 <- p_left | p_middle | p_right +
     theme = theme(plot.title = element_text(face = "bold", size = 14, hjust = 0.5, margin = margin(b = 10)))
   )
 
-ggsave(file.path(paper_plots_dir, "Figure6.png"),
-       p_figure6, width = 48, height = 14, dpi = 300, units = "cm")
-cat("✓ Saved: Figure6.png\n")
+ggsave(file.path(paper_plots_dir, "Figure6.tif"),
+       p_figure6, width = 48, height = 14, dpi = 300, units = "cm",
+       compression = "lzw")
+cat("✓ Saved: Figure6.tif\n")
 
 # ============================================================================== =
 # REAL DATA FIGURES
@@ -520,9 +524,10 @@ p_real_entropy <- ggplot() +
   theme_paper() +
   theme(legend.position = "bottom")
 
-ggsave(file.path(paper_plots_dir, "Figure7.png"),
-       p_real_entropy, width = 14, height = 7, dpi = 300, units = "cm")
-cat("✓ Saved: Figure7.png\n")
+ggsave(file.path(paper_plots_dir, "Figure7.tif"),
+       p_real_entropy, width = 14, height = 7, dpi = 300, units = "cm",
+       compression = "lzw")
+cat("✓ Saved: Figure7.tif\n")
 
 
 
@@ -535,6 +540,7 @@ cat("Figure 8: PSE and JND Boxplots...\n")
 data_200 <- data_real_clean %>% filter(n_trials == 200)
 
 p_real_pse <- ggplot(data_200, aes(x = algorithm, y = pse, fill = algorithm)) +
+  geom_line(aes(group = subj), alpha = 0.3, linewidth = 0.5, color = "gray60") +
   geom_boxplot(alpha = 0.5, outlier.shape = NA) +
   geom_jitter(width = 0.2, alpha = 0.5) +
   facet_wrap(~ modality) +
@@ -548,6 +554,7 @@ p_real_pse <- ggplot(data_200, aes(x = algorithm, y = pse, fill = algorithm)) +
   theme(legend.position = "none")
 
 p_real_jnd <- ggplot(data_200, aes(x = algorithm, y = jnd, fill = algorithm)) +
+  geom_line(aes(group = subj), alpha = 0.3, linewidth = 0.5, color = "gray60") +
   geom_boxplot(alpha = 0.5, outlier.shape = NA) +
   geom_jitter(width = 0.2, alpha = 0.5) +
   facet_wrap(~ modality) +
@@ -566,9 +573,10 @@ p_real_fig1 <- p_real_pse | p_real_jnd +
     theme = theme(plot.title = element_text(face = "bold", size = 13, hjust = 0.5))
   )
 
-ggsave(file.path(paper_plots_dir, "Figure8.png"),
-       p_real_fig1, width = 16, height = 7, dpi = 300, units = "cm")
-cat("✓ Saved: Figure8.png\n")
+ggsave(file.path(paper_plots_dir, "Figure8.tif"),
+       p_real_fig1, width = 16, height = 7, dpi = 300, units = "cm",
+       compression = "lzw")
+cat("✓ Saved: Figure8.tif\n")
 
 
 
@@ -632,9 +640,10 @@ p_real_fig2 <- (p_real_pse_stab / p_real_jnd_stab) +
     theme = theme(plot.title = element_text(face = "bold", size = 13, hjust = 0.5))
   )
 
-ggsave(file.path(paper_plots_dir, "Figure9.png"),
-       p_real_fig2, width = 14, height = 12, dpi = 300, units = "cm")
-cat("✓ Saved: Figure9.png\n")
+ggsave(file.path(paper_plots_dir, "Figure9.tif"),
+       p_real_fig2, width = 14, height = 12, dpi = 300, units = "cm",
+       compression = "lzw")
+cat("✓ Saved: Figure9.tif\n")
 
 
 
@@ -925,9 +934,10 @@ p_figure10 <- (((p9 / p10) + plot_layout(heights = c(0.5, 0.5))) | p11b) +
     theme = theme(plot.title = element_text(face = "bold", size = 13, hjust = 0.5))
   )
 
-ggsave(file.path(paper_plots_dir, "Figure10.png"),
-       p_figure10, width = 22, height = 16, dpi = 300, units = "cm")
-cat("✓ Saved: Figure10.png\n")
+ggsave(file.path(paper_plots_dir, "Figure10.tif"),
+       p_figure10, width = 22, height = 16, dpi = 300, units = "cm",
+       compression = "lzw")
+cat("✓ Saved: Figure10.tif\n")
 
 
 cat("\n================================================================================\n")
@@ -935,12 +945,12 @@ cat("PUBLICATION FIGURES COMPLETE\n")
 cat("================================================================================\n")
 
 cat("SIMULATION DATA FIGURES:\n")
-cat("  Figure4.png (Models Performance - Accuracy + Convergence)\n")
-cat("  Figure6.png (Analysis Metrics - Stimulus + Asymmetry + Entropy)\n\n")
+cat("  Figure4.tif (Models Performance - Accuracy + Convergence)\n")
+cat("  Figure6.tif (Analysis Metrics - Stimulus + Asymmetry + Entropy)\n\n")
 
 cat("REAL DATA FIGURES:\n")
-cat("  Figure7.png (Latency Entropy Evolution)\n")
-cat("  Figure8.png (PSE and JND at N=200)\n")
-cat("  Figure9.png (Stability Points)\n")
-cat("  Figure10.png (AUC Analysis and Convergence)\n\n")
+cat("  Figure7.tif (Latency Entropy Evolution)\n")
+cat("  Figure8.tif (PSE and JND at N=200)\n")
+cat("  Figure9.tif (Stability Points)\n")
+cat("  Figure10.tif (AUC Analysis and Convergence)\n\n")
 

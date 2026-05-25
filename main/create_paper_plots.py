@@ -28,9 +28,9 @@ JND_GRID = [20, 40, 60]
 OFFSET = 500
 COLORS = {"ABS1": "#1f77b4", "REL1": "#ff7f0e", "REL2": "#2ca02c"}
 
-f3 = "Figure3.png"
-f5 = "Figure5.png"
-f7 = "Figure7.png"
+f3 = "Figure3.tif"
+f5 = "Figure5.tif"
+f7 = "Figure7.tif"
 input_file = "/data/CODE/python/adopy_tests/R/indata/results_BIS_fx_vs_ad_td_2model_rel_logistic_prog_long.xlsx"
 
 def load_group_data(model_name, pse, jnd):
@@ -126,7 +126,7 @@ def create_grid_psychometric(output_filename="grid_psychometric.png"):
     
     plt.tight_layout()
     output_path = output_dir / output_filename
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight', format='tiff', pil_kwargs={'compression': 'tiff_lzw'})
     print(f"✓ Saved: {output_path}")
     plt.close()
 
@@ -204,7 +204,7 @@ def create_latency_envelope_grid(output_filename="grid_latency_envelope.png"):
     
     plt.tight_layout(rect=[0, 0, 1, 0.97])
     output_path = output_dir / output_filename
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight', format='tiff', pil_kwargs={'compression': 'tiff_lzw'})
     print(f"✓ Saved: {output_path}")
     plt.close()
 
@@ -321,7 +321,7 @@ def create_latency_distribution_grid(input_dir=None, output_filename="latency_di
     
     plt.tight_layout()
     output_path = output_dir / output_filename
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight', format='tiff', pil_kwargs={'compression': 'tiff_lzw'})
     print(f"✓ Saved: {output_path}")
     plt.close()
     
@@ -532,7 +532,7 @@ def create_figure7_combined(input_dir=None, excel_path=None, output_filename="Fi
                 ax.legend(fontsize=7, loc='best')
     
     output_path = output_dir / output_filename
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight', format='tiff', pil_kwargs={'compression': 'tiff_lzw'})
     print(f"✓ Saved: {output_path}")
     plt.close()
 
