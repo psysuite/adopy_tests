@@ -346,109 +346,101 @@ This allows re-running analysis on existing simulations without re-generating GB
 
 ---
 
-## Stimulus Distribution Validation Analysis
+## Data Analysis & Publication Workflow
 
 ### Overview
 
-This analysis validates that the stimulus latencies presented during simulations follow the intended PSE/JND parameters. The analysis quantifies:
+The project includes comprehensive data analysis pipelines for both simulated and real experimental data, with R-based statistical analysis and publication-ready figure generation.
 
-1. **Stimulus Center (SC)**: Mean of presented latencies → should correlate with PSE
-2. **Stimulus Spread (SS)**: Std of presented latencies → should correlate with JND
-3. **Bimodality Index (BI)**: Measure of how bimodal the distribution is → should increase with JND
+### Python Analysis Scripts
 
-All metrics are calculated **cumulatively** at progressive trial blocks (40, 60, 80, 100, 120, 140, 160, 180, 200).
+**Simulation Data Processing:**
+- `main/regenerate_simulation_data.py` - Regenerate all analysis from GBF files (skip mode)
+- `main/regenerate_simulation_plots.py` - Regenerate plots from existing Excel files
+- `main/progr_analyze_folder.py` - Progressive analysis on a folder of GBF files
 
-### Workflow
+**Real Data Analysis:**
+- `main/group_realdata_analysis.py` - Analyze real experimental data with progressive metrics
 
-**Step 1: Run Simulations**
-```bash
-python main/group_sim_gridrnd_ABS1.py
-python main/group_sim_gridrnd_REL1.py
-python main/group_sim_gridrnd_REL2.py
+**Publication Figures:**
+- `main/create_paper_plots.py` - Generate publication-ready figures
+  - `create_grid_psychometric(output_filename)` - 3×3 grid of psychometric functions
+  - `create_latency_envelope_grid(output_filename)` - 3×3 grid of latency distributions
+  - `create_latency_distribution_grid(input_dir, output_filename)` - 2×2 real data distributions
+  - `create_figure7_combined(input_dir, excel_path, output_filename)` - Combined latency + entropy figure
+
+### R Analysis Pipeline
+
+**Simulation Analysis:**
+- `R/sim_00_run_all.R` - Master script for all simulation analyses
+- `R/sim_01_import_data.R` - Import CSV data from Python
+- `R/sim_02_model_comparison.R` - Compare ABS1, REL1, REL2 performance
+- `R/sim_03_stimulus_metrics_analysis.R` - Analyze stimulus center/spread correlations
+- `R/sim_04_asymmetry_index_evolution.R` - Track asymmetry convergence
+- `R/sim_05_lat_entropy_analysis.R` - Analyze latency entropy evolution
+
+**Real Data Analysis:**
+- `R/real_00_run_all.R` - Master script for all real data analyses
+- `R/real_01_import_data.R` - Import real experimental data
+- `R/real_02_descriptive_analysis.R` - Descriptive statistics and distributions
+- `R/real_03_statistical_analysis.R` - Hypothesis testing and comparisons
+- `R/real_04_convergence_analysis.R` - Convergence and stability analysis
+
+**Publication Figures:**
+- `R/00_create_paper_figures.R` - Generate all publication figures (Figures 4-10)
+- `R/00_create_paper_tables.R` - Generate publication tables
+
+**Utilities:**
+- `R/effect_size_utils.R` - Effect size calculations
+- `R/npar_posthoc.R` - Non-parametric post-hoc tests
+
+### Data Flow
+
+```
+Simulations (Python)
+    ↓
+GBF files → regenerate_simulation_data.py → Excel files
+    ↓
+CSV export → R/sim_*.R → Statistical analysis
+    ↓
+R/00_create_paper_figures.R → Publication figures
 ```
 
-These scripts automatically calculate stimulus metrics and add them to Excel files during Phase 3.
+### CSV Export Format
 
-**Step 2: Retroactively Add Metrics (if needed)**
-If you have existing simulations without metrics:
-```bash
-python main/post_add/add_progressive_stimulus_metrics.py
-```
+**File:** `R/indata/stimulus_metrics_all_models.csv`
 
-**Step 3: Generate Validation Plots**
-```bash
-python main/post_plot/regenerate_grid_plots.py
-```
+**Columns (one row per trial block per subject):**
+- `model`: Model name (ABS1, REL1, REL2)
+- `pse_true`, `jnd_true`: True parameters
+- `subject_id`: Subject identifier
+- `group`: Group index
+- `trial_block`: Trial count (40, 60, 80, ..., 200)
+- `stimulus_center`: Mean stimulus latency
+- `stimulus_spread`: Std of stimulus latency
+- `lat_entropy`: Latency entropy
+- `pse_est`: Estimated PSE at trial block
+- `jnd_est`: Estimated JND at trial block
+- `asymmetry_index`: Asymmetry metric
 
-Regenerates grid plots from existing individual plots without re-running simulations.
+### Progressive Metrics (Rounded to 2 decimals)
 
-**Step 4: Export for R Analysis**
-```bash
-python main/export_stimulus_metrics_for_r.py
-```
+All metrics are calculated cumulatively at trial blocks: 40, 60, 80, 100, 120, 140, 160, 180, 200
 
-Creates: `../data/output/stimulus_metrics_for_r/stimulus_metrics_all_models.csv`
+**Stimulus Distribution:**
+- `stimulus_center`: Mean of stimulus latencies
+- `stimulus_spread`: Standard deviation of stimulus latencies
+- `stimulus_min`, `stimulus_max`: Range of stimulus latencies
 
-**Step 5: Statistical Analysis in R**
-Use the R workspace (`R_bis_ad_fx`) to perform:
-- Hartigan's dip test for bimodality validation
-- Pearson/Spearman correlations (SC vs PSE, SS vs JND)
-- Linear regression models
-- Statistical significance testing
+**Psychometric:**
+- `pse_est`: Fitted PSE from cumulative data
+- `jnd_est`: Fitted JND from cumulative data
 
-### Excel Columns Added
+**Asymmetry:**
+- `asymmetry_index`: (n_after - n_before) / total, range [-1, 1]
 
-For each trial block (40, 60, 80, 100, 120, 140, 160, 180, 200):
-
-- `stimulus_center_{n}`: Mean latency up to trial n
-- `stimulus_spread_{n}`: Std of latencies up to trial n
-- `stimulus_min_{n}`: Min latency up to trial n
-- `stimulus_max_{n}`: Max latency up to trial n
-- `bimodality_index_{n}`: Bimodality measure (0=unimodal, 1=bimodal)
-
-### Expected Results
-
-**ABS1:**
-- **Stimulus Center**: Should converge to PSE value
-- **Stimulus Spread**: Should converge to JND value
-- **Bimodality Index**: Should increase with JND (higher JND → more bimodal)
-
-**REL1 & REL2:**
-- **Stimulus Center**: Should remain ~500 (balanced around offset)
-- **Stimulus Spread**: Should be lower than ABS1 (more constrained)
-- **Bimodality Index**: Should be low (balanced presentation)
-
-### Bimodality Index Interpretation
-
-The bimodality index is calculated as:
-- Find histogram peaks (local maxima)
-- If 2+ peaks exist: ratio of 2nd peak to 1st peak
-- If <2 peaks: 0 (unimodal)
-
-Range: [0, 1]
-- 0: Unimodal (single peak)
-- 0.5: Two peaks of similar height
-- 1: Two peaks of equal height
-
-For validation in R, use Hartigan's dip test for statistical significance.
-
----
-
-## Recreate plots
-
-**`main/post_plot/regenerate_grid_plots.py`:** Recreate grid plots from existing individual plots without re-running simulations
-**`main/post_plot/plot_analysis_metrics.py`:** Generate 5 analysis plots from all group Excel files (runs automatically as Phase 6)
-
----
-
-### Other Utility Scripts
-
-
-**`main/post_add/add_progressive_asymmetry.py`:** Retroactively add progressive asymmetry calculations to existing Excel files
-
-**`main/post_add/add_progressive_stimulus_metrics.py`:** Retroactively add stimulus distribution metrics to existing Excel files
-
-**`main/export_stimulus_metrics_for_r.py`:** Export stimulus distribution metrics for statistical analysis in R
+**Entropy:**
+- `lat_entropy`: Shannon entropy of latency distribution
 
 
 ---
@@ -460,30 +452,49 @@ For validation in R, use Hartigan's dip test for statistical significance.
 **Simulation Engine:**
 - `analysis/core/simulation_engine.py` - Unified simulation logic for all three models
 
-**Multithreading:**
-- `utilities/multithreading_utils.py` - SubjectSimulationTask and MultiThreadedSimulationRunner classes
-  - `parse_gbf_filename()` - Extract PSE/JND from filename
-  - `load_gbf_files_for_group()` - Load GBF files for skip mode
-  - `backfill_skip_mode()` - Fill trial data from GBF files
-  - `parse_gbf_filename()` - Extract PSE/JND from filename
-  - `load_gbf_files_for_group()` - Load GBF files for skip mode
-  - `backfill_skip_mode()` - Fill trial data from GBF files
+**Progressive Analysis:**
+- `analysis/core/progressive_analyzer.py` - Progressive psychometric analysis
+  - `run_progressive_analysis()` - Calculate PSE/JND at trial intervals
+  - Returns: trial_counts, pse_values, jnd_values, lat_entropy
 
 **Psychometric Analysis:**
 - `analysis/core/psychometric_analysis.py` - Core analysis functions:
-  - `calculate_asymmetry_metrics()` - Asymmetry index calculation
-  - `calculate_progressive_asymmetry()` - Progressive asymmetry at trial counts
-  - `calculate_progressive_stimulus_metrics()` - Stimulus distribution analysis
+  - `calculate_progressive_asymmetry()` - Asymmetry at trial counts
+  - `calculate_progressive_stimulus_metrics()` - Stimulus distribution metrics
+  - `calculate_latency_statistics()` - Latency entropy and statistics
   - `analyze_subject_results()` - Complete subject analysis pipeline
-  - `consolidate_results()` - Excel generation (drops `subject_id` and `status` columns)
+  - `consolidate_results()` - Excel generation
   - `add_group_stats_to_excel()` - Add GROUP_mean/std rows
 
+**Data Generation:**
+- `analysis/core/generate_analysis_data.py` - Data pipeline functions:
+  - `add_progressive_asymmetry_to_excel()` - Add asymmetry columns
+  - `add_progressive_lat_entropy_to_excel()` - Add entropy columns
+  - `add_progressive_stimulus_metrics_to_excel()` - Add stimulus metrics
+  - `add_final_estimates_to_excel()` - Copy pse_200/jnd_200 to pse_est/jnd_est
+  - `export_stimulus_metrics_to_csv()` - Export to CSV for R
+  - `regenerate_all_data_from_gbf()` - Full pipeline from GBF files
+  - `generate_all_data()` - Add metrics to existing Excel files
+
 **Plotting:**
-- `utilities/plotting.py` - Plotting functions:
-  - `plot_group_histograms()` - Group stimulus distribution
-  - `plot_group_psychometric()` - Group psychometric curves
-  - `plot_group_model_histograms()` - Model-specific histograms (REL2)
-  - `create_grid_plots_from_groups()` - 3×3 grid creation with PSE/JND labels
+- `analysis/core/plotting.py` - Core plotting functions
+- `analysis/core/plot_psychometric_curves.py` - Psychometric curve plotting
+- `analysis/core/plot_stimulus_distribution.py` - Stimulus distribution plots
+- `analysis/core/generate_analysis_plots.py` - Analysis metric plots
+
+**Data Loading:**
+- `analysis/core/data_loader.py` - Load and expand experimental data
+- `analysis/io/metadata.py` - Extract metadata from filenames
+
+**Multithreading:**
+- `utilities/multithreading_utils.py` - Parallel execution:
+  - `SubjectSimulationTask` - Task encapsulation
+  - `MultiThreadedSimulationRunner` - Thread pool management
+  - `run_subject_simulation()` - Single subject simulation
+  - `run_progressive_analysis_task()` - Single subject analysis
+  - `parse_gbf_filename()` - Extract PSE/JND from filename
+  - `load_gbf_files_for_group()` - Load GBF files for skip mode
+  - `backfill_skip_mode()` - Fill trial data from GBF files
 
 ---
 
@@ -573,31 +584,47 @@ All files use:
 ## Output Directory Structure
 
 ```
-data/output/
-├── console/
-│   ├── {subject_id}_psychometric.png
+data/
+├── output/
+│   ├── console/
+│   │   ├── {subject_id}_psychometric.png
+│   │   └── ...
+│   ├── real/
+│   │   ├── {subject_id}_psychometric.png
+│   │   └── ...
+│   └── sim_gridrnd/
+│       ├── ABS1/
+│       │   ├── group_480_20/
+│       │   │   ├── S*_G*_PSE_JND_ABS1.txt (20 GBF files)
+│       │   │   └── results/
+│       │   │       ├── ABS1_G1_group_histogram.png
+│       │   │       ├── ABS1_G1_group_psychometric.png
+│       │   │       └── ABS1_G1_results_summary.xlsx
+│       │   ├── group_480_40/ ... (N groups total)
+│       │   ├── ABS1_histogram_grid.png
+│       │   ├── ABS1_psychometric_grid.png
+│       │   ├── asymmetry_modulo.png
+│       │   ├── asymmetry_scatter_envelope.png
+│       │   ├── stimulus_center_evolution.png
+│       │   ├── stimulus_spread_evolution.png
+│       │   └── bimodality_index_evolution.png
+│       ├── REL1/ (similar structure)
+│       └── REL2/ (similar structure)
+├── paper_plots/
+│   ├── Figure3.png (grid psychometric)
+│   ├── Figure5.png (latency envelope grid)
+│   ├── Figure7.png (combined latency + entropy)
 │   └── ...
-├── real/
-│   ├── {subject_id}_psychometric.png
-│   └── ...
-└── sim_gridrnd/
-    ├── ABS1/
-    │   ├── group_480_20/
-    │   │   ├── S*_G*_PSE_JND_ABS1.txt (20 GBF files)
-    │   │   └── results/
-    │   │       ├── ABS1_G1_group_histogram.png
-    │   │       ├── ABS1_G1_group_psychometric.png
-    │   │       └── ABS1_G1_results_summary.xlsx
-    │   ├── group_480_40/ ... (N groups total, configurable)
-    │   ├── ABS1_histogram_grid.png
-    │   ├── ABS1_psychometric_grid.png
-    │   ├── asymmetry_modulo.png
-    │   ├── asymmetry_scatter_envelope.png
-    │   ├── stimulus_center_evolution.png
-    │   ├── stimulus_spread_evolution.png
-    │   └── bimodality_index_evolution.png
-    ├── REL1/ (similar structure)
-    └── REL2/ (similar structure)
+└── input/
+    ├── expdata/ (real experimental data files)
+    └── results_BIS_fx_vs_ad_td_2model_rel_logistic_prog_long.xlsx
+
+R/
+├── indata/
+│   └── stimulus_metrics_all_models.csv (exported from Python)
+├── results_simulations/ (RDS files from R analysis)
+├── results_real_logistic/ (RDS files from R analysis)
+└── [R scripts]
 ```
 
 ---
@@ -655,7 +682,7 @@ make clean
 
 ---
 
-*Last updated: 2026-04-29*
+*Last updated: 2026-05-23*
 
 ## 📚 Additional Documentation
 
