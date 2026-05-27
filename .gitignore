@@ -29,3 +29,7 @@ __pycache__/
 *.swp
 *.swo
 *~
+/R/results_simulations/models/model_lat_entropy_aov.rds
+/R/results_simulations/models/model_aiabs_evo_abs1.rds
+/R/results_simulations/models/model_ai_evo_abs1.rds
+/R/results_simulations/models/anova_asymmetry_abs1_analysis.rds

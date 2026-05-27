@@ -245,6 +245,46 @@ print_effect_sizes(effect_sizes_ai_evo, "Effect Sizes for AI Evolution (η²)")
 cat("\nPost-hoc pairwise comparisons for AI evolution (Wilcoxon signed-rank tests with FDR correction):\n")
 npar_ph_pairwise_within(data_abs1, "asymmetry_index", "trial_block_f", "subject_id", corr="fdr")
 
+# Comparison p.value p.adjust Significant
+# <chr>        <dbl>    <dbl> <lgl>      
+# 1 40 vs 60    0.338     0.518 FALSE      
+# 2 40 vs 80    0.174     0.481 FALSE      
+# 3 40 vs 100   0.162     0.481 FALSE      
+# 4 40 vs 120   0.216     0.481 FALSE      
+# 5 40 vs 140   0.193     0.481 FALSE      
+# 6 40 vs 160   0.145     0.481 FALSE      
+# 7 40 vs 180   0.124     0.481 FALSE      
+# 8 40 vs 200   0.124     0.481 FALSE      
+# 9 60 vs 80    0.0672    0.481 FALSE      
+# 10 60 vs 100   0.167     0.481 FALSE      
+# 11 60 vs 120   0.281     0.517 FALSE      
+# 12 60 vs 140   0.168     0.481 FALSE      
+# 13 60 vs 160   0.141     0.481 FALSE      
+# 14 60 vs 180   0.123     0.481 FALSE      
+# 15 60 vs 200   0.102     0.481 FALSE      
+# 16 80 vs 100   0.796     0.821 FALSE      
+# 17 80 vs 120   0.788     0.821 FALSE      
+# 18 80 vs 140   0.679     0.782 FALSE      
+# 19 80 vs 160   0.587     0.705 FALSE      
+# 20 80 vs 180   0.490     0.630 FALSE      
+# 21 80 vs 200   0.451     0.601 FALSE      
+# 22 100 vs 120  0.295     0.517 FALSE      
+# 23 100 vs 140  0.821     0.821 FALSE      
+# 24 100 vs 160  0.695     0.782 FALSE      
+# 25 100 vs 180  0.583     0.705 FALSE      
+# 26 100 vs 200  0.427     0.591 FALSE      
+# 27 120 vs 140  0.173     0.481 FALSE      
+# 28 120 vs 160  0.346     0.518 FALSE      
+# 29 120 vs 180  0.271     0.517 FALSE      
+# 30 120 vs 200  0.220     0.481 FALSE      
+# 31 140 vs 160  0.422     0.591 FALSE      
+# 32 140 vs 180  0.309     0.517 FALSE      
+# 33 140 vs 200  0.316     0.517 FALSE      
+# 34 160 vs 180  0.222     0.481 FALSE      
+# 35 160 vs 200  0.227     0.481 FALSE      
+# 36 180 vs 200  0.801     0.821 FALSE   
+
+
 # |AI| evolution with hierarchical structure
 if (file.exists(cache_aiabs_evo)) {
   cat("Loading cached |AI| evolution ANOVA results...\n")
@@ -313,6 +353,14 @@ cat("✓ Saved: statistical models\n")
 
 saveRDS(data_abs1, file.path(results_filepath, "models", "asymmetry_abs1_data.rds"))
 cat("✓ Saved: ABS1 clean data for plotting\n")
+
+# Save data for plotting in paper figures (format expected by 00_create_paper_figures.R)
+asymmetry_evolution_data <- data_clean %>%
+  dplyr::select(model, trial_block, asymmetry_index, asymmetry_index_abs) %>%
+  filter(model == "ABS1")
+
+saveRDS(asymmetry_evolution_data, file.path(results_filepath, "models", "asymmetry_evolution_data.rds"))
+cat("✓ Saved: asymmetry_evolution_data.rds for paper figures\n")
 
 cat("\n================================================================================\n")
 cat("ASYMMETRY INDEX EVOLUTION ANALYSIS COMPLETE\n")

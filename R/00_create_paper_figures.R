@@ -453,11 +453,13 @@ title_entropy <- ggplot() +
            size = 6, fontface = "bold", color = "black") +
   theme_void()
 
-# Create left section (Stimuli metrics) with section title
-p_left <- (title_stimuli) / 
-          ((p_center_scatter_title | p_center_box_notitle) / 
-           (p_spread_scatter_title | p_spread_box_notitle)) +
-  plot_layout(heights = c(0.08, 1))
+# Create stimuli metrics section (2x2 grid) - save as temporary PNG for Python to use
+p_stimuli_grid <- ((p_center_scatter_title | p_center_box_notitle) / 
+                   (p_spread_scatter_title | p_spread_box_notitle))
+
+ggsave(file.path(paper_plots_dir, "Figure5_stimuli_metrics_temp.png"),
+       p_stimuli_grid, width = 16, height = 14, dpi = 300, units = "cm")
+cat("✓ Saved temporary: Figure5_stimuli_metrics_temp.png\n")
 
 # Create middle section (AI evolution) with section title
 p_middle <- (title_ai) / 
@@ -469,15 +471,15 @@ p_right <- (title_entropy) /
            (p_entropy_evolution_title) +
   plot_layout(heights = c(0.08, 1))
 
-# Combine Figure 6 with proper layout
-p_figure6 <- p_left | p_middle | p_right +
+# Combine Figure 6 with proper layout (without stimuli metrics - moved to Figure 5)
+p_figure6 <- p_middle | p_right +
   plot_annotation(
     title = "Analysis Metrics",
     theme = theme(plot.title = element_text(face = "bold", size = 14, hjust = 0.5, margin = margin(b = 10)))
   )
 
 ggsave(file.path(paper_plots_dir, "Figure6.tif"),
-       p_figure6, width = 48, height = 14, dpi = 300, units = "cm",
+       p_figure6, width = 32, height = 14, dpi = 300, units = "cm",
        compression = "lzw")
 cat("✓ Saved: Figure6.tif\n")
 

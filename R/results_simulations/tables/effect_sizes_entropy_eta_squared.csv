@@ -1,0 +1,8 @@
+"term","SSn","SSd","eta_squared","analysis","SS"
+"model",50.1895042386469,319.169839876612,0.135882589782229,"Latency Entropy Main",NA
+"trial_block_f",3.16365300411506,110.667575678993,0.0277924875336475,"Latency Entropy Main",NA
+"model:trial_block_f",39.5677268724283,110.667575679002,0.263371698931301,"Latency Entropy Main",NA
+"model",NA,NA,0.127696134907463,"Latency Entropy Final (N=200)",8.42669330816206
+"pse_true_z",NA,NA,3.62315526735725e-11,"Latency Entropy Final (N=200)",2.39092735798122e-09
+"jnd_true_z",NA,NA,0.437105576382226,"Latency Entropy Final (N=200)",28.8446838123145
+"Residuals",NA,NA,0.435198288674079,"Latency Entropy Final (N=200)",28.7188215175893

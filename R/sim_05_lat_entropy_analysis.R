@@ -69,11 +69,20 @@ cat("=== STATISTICAL ANALYSIS ===\n\n")
 # ============================================================================
 # FINAL TRIAL BLOCK ANALYSIS (N=200)
 # ============================================================================
-# Define cache file path
-results_dir <- "/data/Dropbox/RDATA/R_bis_ad_fx/results_simulations"
-dir.create(results_dir, showWarnings = FALSE, recursive = TRUE)
-dir.create(file.path(results_dir, "tables"), showWarnings = FALSE, recursive = TRUE)
-dir.create(file.path(results_dir, "models"), showWarnings = FALSE, recursive = TRUE)
+# Define results directory (use global if available, otherwise set it)
+if(!exists('results_filepath')){
+  if(!exists('root_dir')){
+    root_dir = "/data/CODE/python/adopy_tests/"
+  }
+  if(!exists('project_name')){
+    project_name = "R"
+  }
+  results_filepath <- paste0(root_dir, project_name, "/results_simulations")
+}
+
+dir.create(results_filepath, showWarnings = FALSE, recursive = TRUE)
+dir.create(file.path(results_filepath, "tables"), showWarnings = FALSE, recursive = TRUE)
+dir.create(file.path(results_filepath, "models"), showWarnings = FALSE, recursive = TRUE)
 
 
 cat("\n=== FINAL TRIAL BLOCK ANALYSIS (N=200) ===\n\n")
@@ -99,7 +108,7 @@ print(desc_final)
 cat("\n\nANOVA for model effect at N=200:\n")
 
 # Define cache file path for final ANOVA
-cache_final_aov <- file.path(results_dir, "models", "lat_entropy_final_aov.rds")
+cache_final_aov <- file.path(results_filepath, "models", "lat_entropy_final_aov.rds")
 
 if (file.exists(cache_final_aov)) {
   cat("Loading cached final ANOVA results...\n")
@@ -140,7 +149,7 @@ cat("Formula: lat_entropy ~ model * trial_block + Error(subject_id/(trial_block)
 
 
 
-cache_model_aov <- file.path(results_dir, "models", "model_lat_entropy_aov.rds")
+cache_model_aov <- file.path(results_filepath, "models", "model_lat_entropy_aov.rds")
 
 # Check if cached results exist BEFORE computing
 if (file.exists(cache_model_aov)) {
@@ -172,7 +181,7 @@ print_effect_sizes(effect_sizes_entropy_main, "Effect Sizes for Latency Entropy 
 cat("=== POST-HOC ANALYSIS: Pairwise Comparisons by Trial Block ===\n\n")
 
 # Define cache file path for posthoc results
-cache_posthoc <- file.path(results_dir, "models", "lat_entropy_posthoc_by_block.rds")
+cache_posthoc <- file.path(results_filepath, "models", "lat_entropy_posthoc_by_block.rds")
 
 # Check if cached posthoc results exist
 if (file.exists(cache_posthoc)) {
@@ -293,25 +302,25 @@ plot_data <- df %>%
 
 # Save descriptive statistics
 write.csv(desc_by_model, 
-          file.path(results_dir, "tables", "lat_entropy_by_model.csv"), 
+          file.path(results_filepath, "tables", "lat_entropy_by_model.csv"), 
           row.names = FALSE)
 
 write.csv(desc_by_model_block, 
-          file.path(results_dir, "tables", "lat_entropy_by_model_block.csv"), 
+          file.path(results_filepath, "tables", "lat_entropy_by_model_block.csv"), 
           row.names = FALSE)
 
 # Save plot data
 write.csv(plot_data, 
-          file.path(results_dir, "tables", "lat_entropy_plot_data.csv"), 
+          file.path(results_filepath, "tables", "lat_entropy_plot_data.csv"), 
           row.names = FALSE)
 
 # Save final analysis results
 write.csv(desc_final,
-          file.path(results_dir, "tables", "lat_entropy_final_desc.csv"),
+          file.path(results_filepath, "tables", "lat_entropy_final_desc.csv"),
           row.names = FALSE)
 
 write.csv(results_by_block,
-          file.path(results_dir, "tables", "lat_entropy_rel2_significance_by_block.csv"),
+          file.path(results_filepath, "tables", "lat_entropy_rel2_significance_by_block.csv"),
           row.names = FALSE)
 
 # Combine all effect sizes
@@ -322,10 +331,10 @@ all_effect_sizes_entropy <- bind_rows(
 
 # Save effect sizes
 write.csv(all_effect_sizes_entropy,
-          file.path(results_dir, "tables", "effect_sizes_entropy_eta_squared.csv"),
+          file.path(results_filepath, "tables", "effect_sizes_entropy_eta_squared.csv"),
           row.names = FALSE)
 
-cat(sprintf("Results saved to %s\n", results_dir))
+cat(sprintf("Results saved to %s\n", results_filepath))
 cat("\n")
 
 # ============================================================================
@@ -333,7 +342,7 @@ cat("\n")
 # ============================================================================
 
 # Make plot_data available for plotting script
-saveRDS(plot_data, file.path(results_dir, "models", "lat_entropy_plot_data.rds"))
-saveRDS(model_aov, file.path(results_dir, "models", "model_lat_entropy_aov.rds"))
-saveRDS(desc_final, file.path(results_dir, "models", "lat_entropy_final_desc.rds"))
-saveRDS(results_by_block, file.path(results_dir, "models", "lat_entropy_rel2_significance_by_block.rds"))
+saveRDS(plot_data, file.path(results_filepath, "models", "lat_entropy_plot_data.rds"))
+saveRDS(model_aov, file.path(results_filepath, "models", "model_lat_entropy_aov.rds"))
+saveRDS(desc_final, file.path(results_filepath, "models", "lat_entropy_final_desc.rds"))
+saveRDS(results_by_block, file.path(results_filepath, "models", "lat_entropy_rel2_significance_by_block.rds"))
