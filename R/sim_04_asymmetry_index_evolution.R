@@ -12,10 +12,10 @@ library(janitor)
 library(lme4)
 library(lmerTest)
 library(permuco)
-library(emmeans)
 
 # Load effect size utilities
 source("effect_size_utils.R")
+source("npar_posthoc.R")
 
 
 cat("================================================================================\n")
@@ -153,9 +153,12 @@ cat("\nOne-sample test: AI ~ 0 (controlling for pse_true_z, jnd_true_z)\n")
 anova_ai_final <- aovperm(asymmetry_index ~ pse_true_z + jnd_true_z,
                           data = stimulus_metrics_final_abs1,
                           np = 5000)
-
 cat("ANOVA results:\n")
 print(anova_ai_final)
+# Resampling test using freedman_lane to handle nuisance variables and 5000 permutations.
+# SS  df       F parametric P(>F) resampled P(>F)
+# pse_true_z 5.772335   1 180.209           0.0000          0.0002
+# jnd_true_z 0.008135   1   0.254           0.6149          0.6206
 
 # Extract effect sizes
 effect_sizes_ai_final <- extract_eta_squared(anova_ai_final)
@@ -171,12 +174,17 @@ cat("  Cohen's d (vs 0):", round(cohens_d_ai, 4), "\n")
 # |AI| final values - test against 0 with covariates
 cat("\nOne-sample test: |AI| ~ 0 (controlling for pse_true_z, jnd_true_z)\n")
 
-anova_aiabs_final <- aovperm(asymmetry_index_abs ~ pse_true_z + jnd_true_z,
+anova_aiabs_final <- aovperm(asymmetry_index_abs ~ pse_true_z * jnd_true_z,
                              data = stimulus_metrics_final_abs1,
                              np = 5000)
 
 cat("ANOVA results:\n")
 print(anova_aiabs_final)
+# Resampling test using freedman_lane to handle nuisance variables and 5000 permutations.
+# SS  df       F parametric P(>F) resampled P(>F)
+# pse_true_z            0.006592   1  0.2545           0.6146          0.6222
+# jnd_true_z            2.324772   1 89.7576           0.0000          0.0002
+# pse_true_z:jnd_true_z 0.013620   1  0.5259           0.4693          0.4628
 
 # Extract effect sizes
 effect_sizes_aiabs_final <- extract_eta_squared(anova_aiabs_final)
@@ -224,10 +232,18 @@ if (file.exists(cache_ai_evo)) {
 
 cat("\nANOVA for AI evolution:\n")
 print(anova_ai_evo)
+# SSn dfn   SSd  dfd     MSEn   MSEd        F parametric P(>F) resampled P(>F)
+# pse_true_z    79.0569   1 57.99  177 79.05687 0.3276 241.3191           0.0000          0.0002
+# jnd_true_z     0.0495   1 57.99  177  0.04950 0.3276   0.1511           0.6979          0.7048
+# trial_block_f  0.2021   8 17.61 1432  0.02526 0.0123   2.0535           0.0374          0.0338
 
 # Extract effect sizes
 effect_sizes_ai_evo <- extract_eta_squared(anova_ai_evo)
 print_effect_sizes(effect_sizes_ai_evo, "Effect Sizes for AI Evolution (η²)")
+
+# Post-hoc pairwise comparisons for AI evolution
+cat("\nPost-hoc pairwise comparisons for AI evolution (Wilcoxon signed-rank tests with FDR correction):\n")
+npar_ph_pairwise_within(data_abs1, "asymmetry_index", "trial_block_f", "subject_id", corr="fdr")
 
 # |AI| evolution with hierarchical structure
 if (file.exists(cache_aiabs_evo)) {
@@ -245,10 +261,21 @@ if (file.exists(cache_aiabs_evo)) {
 
 cat("\nANOVA for |AI| evolution:\n")
 print(anova_aiabs_evo)
+# Resampling test using Rd_kheradPajouh_renaud to handle nuisance variables and 5000 permutations.
+# SSn dfn   SSd  dfd    MSEn     MSEd       F parametric P(>F) resampled P(>F)
+# pse_true_z     0.1692   1 49.28  177  0.1692 0.278431  0.6075        4.368e-01          0.4304
+# jnd_true_z    16.1436   1 49.28  177 16.1436 0.278431 57.9805        1.525e-12          0.0002
+# trial_block_f  5.6744   8 10.84 1432  0.7093 0.007567 93.7338        0.000e+00          0.0002
 
 # Extract effect sizes
 effect_sizes_aiabs_evo <- extract_eta_squared(anova_aiabs_evo)
 print_effect_sizes(effect_sizes_aiabs_evo, "Effect Sizes for |AI| Evolution (η²)")
+
+# Post-hoc pairwise comparisons for |AI| evolution
+cat("\nPost-hoc pairwise comparisons for |AI| evolution (Wilcoxon signed-rank tests with FDR correction):\n")
+npar_ph_pairwise_within(data_abs1, "asymmetry_index_abs", "trial_block_f", "subject_id", corr="fdr")
+
+
 
 # Store results (simplified for ANOVA)
 evolution_results <- tibble(

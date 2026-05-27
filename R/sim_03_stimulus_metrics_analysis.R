@@ -11,7 +11,6 @@ library(janitor)
 library(lme4)
 library(lmerTest)
 library(permuco)
-library(emmeans)
 
 # Load effect size utilities
 source("effect_size_utils.R")
@@ -143,36 +142,53 @@ cat("\n--- Stimulus Center ---\n")
 anova_center <- aovperm(stimulus_center ~ model + pse_true_z + jnd_true_z,
                         data = stimulus_metrics_final,
                         np = 5000)
-
 cat("\nANOVA for model effect:\n")
 print(anova_center)
+# Resampling test using freedman_lane to handle nuisance variables and 5000 permutations.
+# SS  df        F parametric P(>F) resampled P(>F)
+# model        143.34   2   0.7702           0.4634          0.4706
+# pse_true_z 53952.23   1 579.7821           0.0000          0.0002
+# jnd_true_z    41.97   1   0.4510           0.5021          0.5034
 
 # Calculate effect sizes
 effect_sizes_center <- extract_eta_squared(anova_center)
 print_effect_sizes(effect_sizes_center, "Effect Sizes for Stimulus Center (η²)")
 
-cat("\nPost-hoc pairwise comparisons (Tukey):\n")
-emm_center <- emmeans(lm(stimulus_center ~ model + pse_true_z + jnd_true_z, data = stimulus_metrics_final), ~ model)
-pairs_center <- pairs(emm_center, adjust = "tukey")
-print(pairs_center)
+cat("\nPost-hoc pairwise comparisons:\n")
+res <- do_npar_anova_phpw(stimulus_metrics_final, "model", "stimulus_center", "pse_true_z")
+# 
+# [1] "in ABS1 (H=151.713118329045, p=9.793335929831e-25)"
+# 1] "NOT SIGNIFICANT in REL1 (H=20.2639913813823, p=0.122035661572199)"
+# [1] "in REL2 (H=146.124216190015, p=6.41350520967471e-24)"
 
 # ...Stimulus Spread ====
 cat("\n--- Stimulus Spread ---\n")
-anova_spread <- aovperm(stimulus_spread ~ model + pse_true_z + jnd_true_z,
+anova_spread <- aovperm(stimulus_spread ~ model + jnd_true_z + pse_true_z,
                         data = stimulus_metrics_final,
                         np = 5000)
-
 cat("\nANOVA for model effect:\n")
 print(anova_spread)
+# Resampling test using freedman_lane to handle nuisance variables and 5000 permutations.
+# SS  df         F parametric P(>F) resampled P(>F)
+# model       18408.31   2  209.6687           0.0000          0.0002
+# jnd_true_z 164111.92   1 3738.4357           0.0000          0.0002
+# pse_true_z     27.84   1    0.6342           0.4262          0.4322
 
 # Calculate effect sizes
 effect_sizes_spread <- extract_eta_squared(anova_spread)
 print_effect_sizes(effect_sizes_spread, "Effect Sizes for Stimulus Spread (η²)")
 
-cat("\nPost-hoc pairwise comparisons (Tukey):\n")
-emm_spread <- emmeans(lm(stimulus_spread ~ model + pse_true_z + jnd_true_z, data = stimulus_metrics_final), ~ model)
-pairs_spread <- pairs(emm_spread, adjust = "tukey")
-print(pairs_spread)
+cat("\nPost-hoc pairwise comparisons:\n")
+do_npar_anova_main(stimulus_metrics_final, "stimulus_spread", "model")
+
+# Main effect: stimulus_spread ~ model, H = 44.4456, p = 0"
+# [1] "SIGNIFICANT - Running pairwise comparisons..."
+#        Comparison    Stat   p.value  p.adjust
+# 1 ABS1 - REL1 = 0  -5.418 6.042e-08 9.063e-08
+# 2 ABS1 - REL2 = 0  -6.491 8.547e-11 2.564e-10
+# 3 REL1 - REL2 = 0 -0.9134     0.361 3.610e-01
+
+res <- do_npar_anova_phpw(stimulus_metrics_final, "model", "stimulus_spread", "jnd_true_z")
 
 # ============================================================================== =
 # CORRELATIONS: Stimulus Metrics vs True Parameters (by Model) ====
@@ -186,7 +202,8 @@ correlation_results_by_model <- list()
 # Test correlations for each model separately
 for (m in c("ABS1", "REL1", "REL2")) {
   # cat("\n", strrep("=", 70), "\n", sep = "")
-  # cat("MODEL: ", m, "\n", sep = "")
+  # cat("MODEL: ", m, "\n", sep = "")[1] "in ABS1 (H=157.624446560685, p=3.19535102223007e-26)"
+
   # cat(strrep("=", 70), "\n", sep = "")
   
   # Filter data for current model

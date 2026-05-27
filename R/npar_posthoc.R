@@ -133,7 +133,7 @@ do_npar_anova_main_repeated <- function(df, resp_var, factor_var, subj_var = "su
   # Usa Friedman test per dati appaiati
   # NOTA: Friedman test richiede dati bilanciati (ogni soggetto in ogni condizione)
   
-  friedman_result <- friedman.test(as.formula(paste0(resp_var, " ~ ", factor_var, " | ", subj_var)), data = df)
+  friedman_result <- npar_repeated_anova(df, resp_var, factor_var, subj_var)
   
   print(paste0("Main effect (repeated measures): ", resp_var, " ~ ", factor_var))
   print(paste0("chi-sq = ", round(friedman_result$statistic, 4), ", p = ", round(friedman_result$p.value, 4)))
@@ -225,4 +225,74 @@ npar_repeated_anova <- function(df, response_var, factor_var, subj_var) {
   
   # Friedman test
   friedman.test(data_matrix)
+}
+
+# ============================================================================================== = 
+# Within-subject pairwise comparisons (Wilcoxon signed-rank test)
+# ============================================================================================== = 
+
+npar_ph_pairwise_within <- function(df, response_var, factor_var, subj_var = "subj", corr="fdr") {
+  # Pairwise Wilcoxon signed-rank tests for within-subject factor
+  # Compares all pairs of factor levels using paired tests
+  
+  # Aggregazione: se più osservazioni per soggetto-fattore, prendi la media
+  df_agg <- df %>%
+    select(all_of(c(subj_var, factor_var, response_var))) %>%
+    group_by(across(all_of(c(subj_var, factor_var)))) %>%
+    summarise(
+      value = mean(get(response_var), na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    rename(!!response_var := value)
+  
+  # Get all factor levels
+  factor_levels <- unique(df_agg[[factor_var]])
+  factor_levels <- sort(factor_levels)
+  
+  # Generate all pairwise combinations
+  pairs <- combn(factor_levels, 2, simplify = FALSE)
+  
+  results <- list()
+  pvalues <- c()
+  comparisons <- c()
+  
+  for (pair in pairs) {
+    level1 <- pair[1]
+    level2 <- pair[2]
+    
+    # Get data for each level
+    data_level1 <- df_agg %>% filter(!!sym(factor_var) == level1) %>% arrange(!!sym(subj_var))
+    data_level2 <- df_agg %>% filter(!!sym(factor_var) == level2) %>% arrange(!!sym(subj_var))
+    
+    # Match subjects
+    common_subj <- intersect(data_level1[[subj_var]], data_level2[[subj_var]])
+    
+    if (length(common_subj) > 0) {
+      data_level1 <- data_level1 %>% filter(!!sym(subj_var) %in% common_subj) %>% arrange(!!sym(subj_var))
+      data_level2 <- data_level2 %>% filter(!!sym(subj_var) %in% common_subj) %>% arrange(!!sym(subj_var))
+      
+      # Wilcoxon signed-rank test
+      wilcox_result <- wilcox.test(data_level1[[response_var]], data_level2[[response_var]], paired = TRUE)
+      
+      comparison_name <- paste0(level1, " vs ", level2)
+      comparisons <- c(comparisons, comparison_name)
+      pvalues <- c(pvalues, wilcox_result$p.value)
+      
+      results[[comparison_name]] <- wilcox_result
+    }
+  }
+  
+  # Adjust p-values
+  adj_pvalues <- p.adjust(pvalues, method = corr)
+  
+  # Create results table
+  results_df <- tibble(
+    Comparison = comparisons,
+    p.value = pvalues,
+    p.adjust = adj_pvalues,
+    Significant = adj_pvalues < 0.05
+  )
+  
+  print(results_df)
+  return(results_df)
 }

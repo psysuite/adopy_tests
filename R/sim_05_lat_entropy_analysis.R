@@ -78,7 +78,11 @@ dir.create(file.path(results_dir, "models"), showWarnings = FALSE, recursive = T
 
 cat("\n=== FINAL TRIAL BLOCK ANALYSIS (N=200) ===\n\n")
 
-data_final <- df %>% filter(trial_block == 200)
+data_final <- df %>% filter(trial_block == 200) %>%
+  dplyr::mutate(
+    pse_true_z = scale(pse_true)[,1],
+    jnd_true_z = scale(jnd_true)[,1]
+  )
 
 cat("Descriptive statistics at N=200:\n")
 desc_final <- data_final %>%
@@ -102,24 +106,31 @@ if (file.exists(cache_final_aov)) {
   anova_final <- readRDS(cache_final_aov)
 } else {
   cat("Computing final ANOVA...\n")
-  anova_final <- aovperm(lat_entropy ~ model , data = data_final, np = 5000)
+  anova_final <- aovperm(lat_entropy ~ model + pse_true_z + jnd_true_z , data = data_final, np = 5000)
   saveRDS(anova_final, cache_final_aov)
   cat("Cached final ANOVA results\n")
 }
 
 print(anova_final)
 
+# Resampling test using freedman_lane to handle nuisance variables and 5000 permutations.
+#                 SS    df     F         parametric P(>F) resampled P(>F)
+# model      8.427e+00   2 7.849e+01           0.0000          0.0002
+# pse_true_z 2.391e-09   1 4.454e-08           0.9998          0.9998
+# jnd_true_z 2.884e+01   1 5.373e+02           0.0000          0.0002
 
 # Calculate effect sizes
 effect_sizes_entropy_final <- extract_eta_squared(anova_final)
 print_effect_sizes(effect_sizes_entropy_final, "Effect Sizes for Latency Entropy at N=200 (η²)")
 
-cat("\n\nPost-hoc pairwise comparisons at N=200 (Tukey):\n")
-mod_final <- lm(lat_entropy ~ model, data = data_final)
-emm_final <- emmeans(mod_final, ~ model)
-pairs_final <- pairs(emm_final, adjust = "tukey")
-print(pairs_final)
-
+cat("\n\nPost-hoc pairwise comparisons at N=200 (Friedman with multiple comparison adjustment):\n")
+do_npar_anova_main(data_final, "lat_entropy", "model")
+# [1] "Main effect: lat_entropy ~ model, H = 68.7847, p = 0"
+# [1] "SIGNIFICANT - Running pairwise comparisons..."
+# Comparison   Stat   p.value  p.adjust
+# 1 ABS1 - REL1 = 0 -2.146   0.03189 3.189e-02
+# 2 ABS1 - REL2 = 0  6.568 5.085e-11 7.628e-11
+# 3 REL1 - REL2 = 0  7.217 5.311e-13 1.593e-12
 
 # ANOVA with permutation test: lat_entropy ~ model + trial_block + model:trial_block + Error(subject_id/(trial_block))
 df$trial_block_f <- factor(df$trial_block)
@@ -176,14 +187,8 @@ if (file.exists(cache_posthoc)) {
   for (tb in sort(unique(df$trial_block))) {
     data_tb <- df %>% filter(trial_block == tb)
     
-    # Fit model for this trial block
-    mod_tb <- lm(lat_entropy ~ model, data = data_tb)
-    
-    # Get pairwise comparisons
-    emm_tb <- emmeans(mod_tb, ~ model)
-    pairs_tb <- pairs(emm_tb, adjust = "tukey")
-    
-    posthoc_results[[as.character(tb)]] <- pairs_tb
+    # Get pairwise comparisons using non-parametric test
+    posthoc_results[[as.character(tb)]] <- do_npar_anova_main(data_tb, "lat_entropy", "model")
   }
   
   saveRDS(posthoc_results, cache_posthoc)
@@ -206,24 +211,36 @@ results_by_block <- data.frame()
 for (tb in sort(unique(df$trial_block))) {
   data_tb <- df %>% filter(trial_block == tb)
   
-  mod_tb <- lm(lat_entropy ~ model, data = data_tb)
-  emm_tb <- emmeans(mod_tb, ~ model)
-  pairs_tb <- pairs(emm_tb, adjust = "tukey")
+  # Use non-parametric Kruskal-Wallis test for pairwise comparisons
+  kw_test <- kruskal.test(lat_entropy ~ model, data = data_tb)
   
-  # Extract p-values for REL2 comparisons
-  pairs_df <- as.data.frame(pairs_tb)
-  
-  rel2_vs_abs1 <- pairs_df %>% filter(contrast == "ABS1 - REL2")
-  rel2_vs_rel1 <- pairs_df %>% filter(contrast == "REL1 - REL2")
-  
-  if (nrow(rel2_vs_abs1) > 0 && nrow(rel2_vs_rel1) > 0) {
-    results_by_block <- rbind(results_by_block, data.frame(
-      trial_block = tb,
-      rel2_vs_abs1_p = rel2_vs_abs1$p.value[1],
-      rel2_vs_rel1_p = rel2_vs_rel1$p.value[1],
-      rel2_vs_abs1_sig = rel2_vs_abs1$p.value[1] < 0.05,
-      rel2_vs_rel1_sig = rel2_vs_rel1$p.value[1] < 0.05
-    ))
+  if (kw_test$p.value < 0.05) {
+    # Perform pairwise Mann-Whitney U tests with Bonferroni correction
+    models <- unique(data_tb$model)
+    n_comparisons <- choose(length(models), 2)
+    bonferroni_alpha <- 0.05 / n_comparisons
+    
+    comparisons <- combn(models, 2, simplify = FALSE)
+    
+    for (comp in comparisons) {
+      data_comp <- data_tb %>% filter(model %in% comp)
+      mw_test <- wilcox.test(lat_entropy ~ model, data = data_comp)
+      
+      if (comp[1] == "ABS1" && comp[2] == "REL2") {
+        results_by_block <- rbind(results_by_block, data.frame(
+          trial_block = tb,
+          rel2_vs_abs1_p = mw_test$p.value,
+          rel2_vs_abs1_sig = mw_test$p.value < bonferroni_alpha,
+          rel2_vs_rel1_p = NA,
+          rel2_vs_rel1_sig = NA
+        ))
+      } else if (comp[1] == "REL1" && comp[2] == "REL2") {
+        if (nrow(results_by_block) > 0 && results_by_block$trial_block[nrow(results_by_block)] == tb) {
+          results_by_block$rel2_vs_rel1_p[nrow(results_by_block)] <- mw_test$p.value
+          results_by_block$rel2_vs_rel1_sig[nrow(results_by_block)] <- mw_test$p.value < bonferroni_alpha
+        }
+      }
+    }
   }
 }
 
