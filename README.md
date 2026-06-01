@@ -23,13 +23,6 @@ This guide describes the implementation of temporal bisection experiments using 
 - Response is binary: 0 (closer to first) or 1 (closer to third)
 - ADOpy updates based on the response and absolute stimulus value
 
-**Key feature:** Can exhibit stimulus presentation bias (more stimuli on one side of offset)
-
-**Best for:**
-- Simple bisection tasks
-- When stimuli can vary widely across the full range
-- Experiments where absolute timing is important
-
 ---
 
 ### 2. REL1 (Relative Single-Engine Model)
@@ -50,13 +43,6 @@ This guide describes the implementation of temporal bisection experiments using 
   - Post: `stimulus = offset + magnitude` (e.g., 500 + 50 = 550ms)
 - User responds: 0 or 1
 - ADOpy updates based on success (correct/incorrect) and magnitude
-
-**Key feature:** Enforces balanced pre/post stimulus presentation by design
-
-**Best for:**
-- Balanced pre/post stimulus presentation
-- When you want to focus on discrimination around the offset
-- Experiments requiring equal sampling of both sides
 
 ---
 
@@ -79,10 +65,8 @@ This guide describes the implementation of temporal bisection experiments using 
 - Only the selected model updates based on success
 - At the end, data from both models is combined for analysis
 
-**Key feature:** Allows independent optimization of pre and post discrimination
-
-**Best for:**
-- When pre and post stimuli might have different psychometric properties
+**This is the Best model:**
+- assumes that pre and post stimuli might have different psychometric properties
 - More sophisticated adaptive sampling
 - Research comparing pre vs post discrimination
 
