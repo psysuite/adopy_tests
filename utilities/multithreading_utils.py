@@ -3,19 +3,18 @@ Utilities for multithreaded simulation and analysis.
 Handles thread pool management and synchronization for subject simulation.
 """
 
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
-import tempfile
-import os
+
+import numpy as np
 
 from analysis.io.converter import save_gbf_file, read_gbf_file
 
 
 class SubjectSimulationTask:
     """Encapsulates a single subject simulation task."""
-    
+
     def __init__(
         self,
         subject_id: int,
@@ -45,20 +44,19 @@ class SubjectSimulationTask:
         self.group_dir = group_dir
         self.model_name = model_name
         self.save_gbf = save_gbf
-        
+
         self.rows = None
         self.result_dict = None
         self.gbf_rows = None
         self.error = None
 
-
 def run_subject_simulation(task: SubjectSimulationTask) -> SubjectSimulationTask:
     """
     Run a single subject simulation in a thread.
-    
+
     Args:
         task: SubjectSimulationTask with all parameters
-        
+
     Returns:
         Updated SubjectSimulationTask with results or error
     """
@@ -73,7 +71,7 @@ def run_subject_simulation(task: SubjectSimulationTask) -> SubjectSimulationTask
             fixed_trials_config=task.fixed_trials_config,
             subject_id=task.subject_id,
         )
-        
+
         # Convert to GBF format
         gbf_rows = [
             {
@@ -84,7 +82,7 @@ def run_subject_simulation(task: SubjectSimulationTask) -> SubjectSimulationTask
             }
             for row in rows
         ]
-        
+
         # Save GBF file if requested
         if task.save_gbf:
             pse_int = int(round(task.pse))
@@ -92,7 +90,7 @@ def run_subject_simulation(task: SubjectSimulationTask) -> SubjectSimulationTask
             filename = f"S{task.subj_in_group:02d}_G{task.group_idx}_{pse_int}_{jnd_int}_{task.model_name}.txt"
             out_path = task.group_dir / filename
             save_gbf_file(gbf_rows, str(out_path))
-        
+
         # Update subj to match the GBF filename (without extension)
         pse_int = int(round(task.pse))
         jnd_int = int(round(task.jnd))
@@ -101,111 +99,19 @@ def run_subject_simulation(task: SubjectSimulationTask) -> SubjectSimulationTask
         # Store the integer pse/jnd used for simulation
         result_dict['pse'] = float(pse_int)
         result_dict['jnd'] = float(jnd_int)
-        
+
         task.rows = rows
         task.result_dict = result_dict
         task.gbf_rows = gbf_rows
-        
+
     except Exception as e:
         task.error = e
-    
+
     return task
 
 
-def run_progressive_analysis_task(
-    gbf_rows: List[Dict],
-    subject_id: str,
-    result_dict: Dict,
-    rows: List[Dict] = None,
-    offset: float = 500,
-    gamma: float = 0.0,
-    lapse: float = 0.0,
-) -> Tuple[str, Dict, str]:
-    """
-    Run progressive analysis for a subject in a thread.
-    
-    Calculates:
-    - Progressive PSE/JND at trial counts: 40, 60, 80, ..., 200
-    - Progressive asymmetry index at same trial counts
-    - Progressive stimulus distribution metrics (center, spread, bimodality)
-    - Progressive Fisher Information for PSE and slope at same trial counts
-    
-    Args:
-        gbf_rows: List of GBF row dictionaries
-        subject_id: Subject identifier for logging
-        result_dict: Result dictionary to update
-        rows: List of trial dicts with 'lat' key for asymmetry/stimulus metrics
-        offset: Offset latency for asymmetry calculation (default 500ms)
-        gamma: Guess rate of the psychometric model (default 0.0)
-        lapse: Lapse rate of the psychometric model (default 0.0)
-        
-    Returns:
-        Tuple of (subject_id, updated_result_dict, error_message or None)
-    """
-    from analysis.core.progressive_analyzer import ProgressiveAnalyzer
-    from analysis.core.psychometric_analysis import (
-        calculate_progressive_asymmetry,
-        calculate_progressive_stimulus_metrics
-    )
-    import numpy as np
-    error_msg = None
-    try:
-        # Save GBF file temporarily
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-            temp_gbf_path = f.name
-            for gbf_row in gbf_rows:
-                f.write(f"{gbf_row['lat']}\t{gbf_row['count']}\t{gbf_row['user_ans']}\t{gbf_row['confl_magn']}\n")
-        
-        # Run progressive analysis (PSE/JND)
-        analyzer = ProgressiveAnalyzer()
-        prog_result = analyzer.run_progressive_analysis(temp_gbf_path, method='logistic')
-        
-        # Add progressive PSE/JND values to result_dict (rounded to 2 decimals)
-        for N in prog_result.trial_counts:
-            pse_val = prog_result.pse_values.get(N)
-            jnd_val = prog_result.jnd_values.get(N)
-            lat_ent_val = prog_result.lat_entropy.get(N)
-            
-            result_dict[f'pse_{N}'] = round(pse_val, 2) if pse_val is not None and np.isfinite(pse_val) else pse_val
-            result_dict[f'jnd_{N}'] = round(jnd_val, 2) if jnd_val is not None and np.isfinite(jnd_val) else jnd_val
-            result_dict[f'lat_entropy_{N}'] = round(lat_ent_val, 2) if lat_ent_val is not None and np.isfinite(lat_ent_val) else lat_ent_val
-        
-        # Calculate progressive asymmetry (if rows provided)
-        if rows:
-            prog_asymmetry = calculate_progressive_asymmetry(rows, offset)
-            for n_trials, asym_idx in prog_asymmetry.items():
-                result_dict[f'asymmetry_{n_trials}'] = round(asym_idx, 2) if asym_idx is not None and np.isfinite(asym_idx) else asym_idx
-        
-        # Calculate progressive stimulus metrics (if rows provided)
-        if rows:
-            prog_stimulus = calculate_progressive_stimulus_metrics(rows)
-            
-            # Add stimulus center metrics (rounded to 2 decimals)
-            for n_trials, value in prog_stimulus['stimulus_center'].items():
-                result_dict[f'stimulus_center_{n_trials}'] = round(value, 2) if value is not None and np.isfinite(value) else value
-            
-            # Add stimulus spread metrics (rounded to 2 decimals)
-            for n_trials, value in prog_stimulus['stimulus_spread'].items():
-                result_dict[f'stimulus_spread_{n_trials}'] = round(value, 2) if value is not None and np.isfinite(value) else value
-            
-            # Add stimulus min metrics (rounded to 2 decimals)
-            for n_trials, value in prog_stimulus['stimulus_min'].items():
-                result_dict[f'stimulus_min_{n_trials}'] = round(value, 2) if value is not None and np.isfinite(value) else value
-            
-            # Add stimulus max metrics (rounded to 2 decimals)
-            for n_trials, value in prog_stimulus['stimulus_max'].items():
-                result_dict[f'stimulus_max_{n_trials}'] = round(value, 2) if value is not None and np.isfinite(value) else value
-        
-        # Clean up temp file
-        os.unlink(temp_gbf_path)
-        
-    except Exception as e:
-        error_msg = str(e)
-    
-    return subject_id, result_dict, error_msg
 
-
-def parse_gbf_filename(stem: str) -> Tuple[float, float]:
+def parse_gbf_filename(stem: str) -> Tuple[float, float] | Tuple[None, None]:
     """
     Parse GBF filename to extract PSE and JND.
     Expected format: SXX_GZ_PSE_JND_MODEL
@@ -240,7 +146,7 @@ def load_gbf_files_for_group(group_dir: Path, model_name: str, offset: float = 5
         try:
             gbf_rows = read_gbf_file(str(gbf_path))
 
-            sigma_val = (jnd_val / 0.6745) if jnd_val is not None else None
+            sigma_val = (jnd_val / np.log(3)) if jnd_val is not None else None
             result_dict = {
                 'subj': filename,
                 'model': model_name,
@@ -316,7 +222,7 @@ def backfill_skip_mode(group_results: list, analysis_tasks: list, n_trials_defau
             result_dict['pse'] = final_pse
             result_dict['jnd'] = final_jnd
             result_dict['mu'] = final_pse
-            result_dict['sigma'] = (final_jnd / 0.6745) if final_jnd is not None else None
+            result_dict['sigma'] = (final_jnd / np.log(3)) if final_jnd is not None else None
             if final_pse is None:
                 print(f"    WARNING: Could not determine PSE/JND for {subj} — "
                       f"results will be inaccurate.")
@@ -324,16 +230,16 @@ def backfill_skip_mode(group_results: list, analysis_tasks: list, n_trials_defau
 
 class MultiThreadedSimulationRunner:
     """Manages multithreaded simulation of subjects."""
-    
-    def __init__(self, max_workers: int = None):
+
+    def __init__(self, max_workers: int|None = None):
         """
         Initialize the runner.
-        
+
         Args:
             max_workers: Maximum number of worker threads. If None, uses CPU count.
         """
         self.max_workers = max_workers
-    
+
     def run_subject_simulations(
         self,
         tasks: List[SubjectSimulationTask],
@@ -341,79 +247,32 @@ class MultiThreadedSimulationRunner:
     ) -> List[SubjectSimulationTask]:
         """
         Run multiple subject simulations in parallel.
-        
+
         Args:
             tasks: List of SubjectSimulationTask objects
             verbose: Whether to print progress
-            
+
         Returns:
             List of completed SubjectSimulationTask objects
         """
         completed_tasks = []
-        
+
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {
                 executor.submit(run_subject_simulation, task): task
                 for task in tasks
             }
-            
+
             completed = 0
             for future in as_completed(futures):
                 completed += 1
                 task = future.result()
                 completed_tasks.append(task)
-                
+
                 if verbose:
                     status = "✓" if task.error is None else "✗"
                     print(f"  [{completed}/{len(tasks)}] Subject {task.subject_id}: {status}")
                     if task.error:
                         print(f"    Error: {task.error}")
-        
+
         return completed_tasks
-    
-    def run_progressive_analyses(
-        self,
-        analysis_tasks: List[Tuple[List[Dict], str, Dict, List[Dict], float]],
-        verbose: bool = True,
-        gamma: float = 0.0,
-        lapse: float = 0.0,
-    ) -> Dict[str, Tuple[Dict, str]]:
-        """
-        Run progressive analyses in parallel.
-        
-        Calculates PSE/JND, asymmetry index, stimulus distribution metrics,
-        and Fisher Information (using gamma/lapse for the correct FI model).
-        
-        Args:
-            analysis_tasks: List of (gbf_rows, subj, result_dict, rows, offset) tuples
-            verbose: Whether to print progress
-            gamma: Guess rate of the psychometric model (default 0.0)
-            lapse: Lapse rate of the psychometric model (default 0.0)
-            
-        Returns:
-            Dictionary mapping subj to (updated_result_dict, error_message)
-        """
-        results = {}
-        
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = {
-                executor.submit(
-                    run_progressive_analysis_task,
-                    gbf_rows, subj, res_dict, rows, offset, gamma, lapse
-                ): subj
-                for gbf_rows, subj, res_dict, rows, offset in analysis_tasks
-            }
-            
-            completed = 0
-            for future in as_completed(futures):
-                completed += 1
-                subj, updated_dict, error_msg = future.result()
-                results[subj] = (updated_dict, error_msg)
-                
-                if verbose:
-                    status = "✓" if error_msg is None else "✗"
-                    print(f"  [{completed}/{len(analysis_tasks)}] Progressive analysis {subj}: {status}")
-                    if error_msg:
-                        print(f"    Warning: {error_msg}")
-        
-        return results

@@ -27,6 +27,7 @@ from pathlib import Path
 from itertools import product
 
 import matplotlib
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
@@ -35,16 +36,16 @@ from scipy.stats import gaussian_kde
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from analysis.core.plotting import load_group_rows
+from analysis.plot.plotting import load_group_rows
 
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
 
-MODELS   = ["ABS1", "REL1", "REL2"]
+MODELS = ["ABS1", "REL1", "REL2"]
 PSE_GRID = [480, 500, 520]
 JND_GRID = [20, 40, 60]
-OFFSET   = 500
+OFFSET = 500
 
 # Fixed axis ranges for all plots (for consistent grid assembly)
 X_MIN = 250
@@ -52,21 +53,22 @@ X_MAX = 750
 Y_MIN = 0
 Y_MAX = 700
 
+
 # ============================================================================
 # SINGLE GROUP PLOT
 # ============================================================================
 
 def plot_group_stimulus_distribution(
-    model_name: str,
-    pse: int, jnd: int,
-    stimulus_center: float,
-    stimulus_spread: float,
-    all_latencies: np.ndarray,
-    all_responses: np.ndarray,
-    results_dir: Path,
-    file_prefix: str,
-    ax=None,
-    dpi=300,
+        model_name: str,
+        pse: int, jnd: int,
+        stimulus_center: float,
+        stimulus_spread: float,
+        all_latencies: np.ndarray,
+        all_responses: np.ndarray,
+        results_dir: Path,
+        file_prefix: str,
+        ax=None,
+        dpi=300,
 ) -> Path | None:
     """
     Plot stimulus distribution for one group.
@@ -109,24 +111,24 @@ def plot_group_stimulus_distribution(
             kde = gaussian_kde(all_latencies, bw_method='scott')
             x_kde = np.linspace(min_stim - 20, max_stim + 20, 300)
             kde_vals = kde(x_kde)
-            
+
             # Normalize KDE to match histogram density
             # Scale by bin width and total count to match histogram scale
             bin_width = bins[1] - bins[0]
             kde_vals_scaled = kde_vals * len(all_latencies) * bin_width
-            
+
             ax.plot(x_kde, kde_vals_scaled, color='steelblue', linewidth=2.0,
                     alpha=0.7, zorder=5)
         except Exception:
             pass
 
     # Stimulus spread lines
-    ax.axvline(stimulus_center, color='darkblue', linestyle='--', 
-              linewidth=1.5, alpha=0.8, zorder=4)
-    ax.axvline(stimulus_center - stimulus_spread, color='purple', 
-              linestyle='--', linewidth=1.5, alpha=0.8, zorder=4)
-    ax.axvline(stimulus_center + stimulus_spread, color='purple', 
-              linestyle='--', linewidth=1.5, alpha=0.8, zorder=4)
+    ax.axvline(stimulus_center, color='darkblue', linestyle='--',
+               linewidth=1.5, alpha=0.8, zorder=4)
+    ax.axvline(stimulus_center - stimulus_spread, color='purple',
+               linestyle='--', linewidth=1.5, alpha=0.8, zorder=4)
+    ax.axvline(stimulus_center + stimulus_spread, color='purple',
+               linestyle='--', linewidth=1.5, alpha=0.8, zorder=4)
 
     # Annotations
     ax.text(0.98, 0.98,
@@ -143,7 +145,7 @@ def plot_group_stimulus_distribution(
         ax.set_title(f'PSE={pse}, JND={jnd}', fontsize=5, fontweight='bold', pad=2)
     ax.legend(fontsize=4, loc='upper left', frameon=False)
     ax.grid(True, alpha=0.3)
-    
+
     # Fixed axis ranges and ticks for consistent grid assembly
     ax.set_xlim(X_MIN, X_MAX)
     ax.set_ylim(Y_MIN, Y_MAX)
@@ -173,13 +175,13 @@ def plot_stimulus_for_model(model_name: str) -> bool:
         print(f"  Output directory not found: {output_dir}")
         return False
 
-    grid       = list(product(PSE_GRID, JND_GRID))
+    grid = list(product(PSE_GRID, JND_GRID))
     group_data = {}
 
     print(f"  Step 1: loading data and generating group plots...")
 
     for group_idx, (pse, jnd) in enumerate(grid, 1):
-        group_dir   = output_dir / f"group_{pse}_{jnd}"
+        group_dir = output_dir / f"group_{pse}_{jnd}"
         results_dir = group_dir / "results"
 
         if not results_dir.exists():
@@ -196,20 +198,20 @@ def plot_stimulus_for_model(model_name: str) -> bool:
             df = pd.read_excel(excel_files[0])
 
             # Count real subject rows
-            subj_mask  = ~df['subj'].astype(str).str.startswith('GROUP_')
+            subj_mask = ~df['subj'].astype(str).str.startswith('GROUP_')
             n_subjects = subj_mask.sum()
 
             # Get stimulus metrics from Excel (should be present from previous analysis)
             stimulus_center_col = None
             stimulus_spread_col = None
-            
+
             # Find the columns for the last trial block (200 trials)
             for col in df.columns:
                 if 'stimulus_center_200' in col:
                     stimulus_center_col = col
                 elif 'stimulus_spread_200' in col:
                     stimulus_spread_col = col
-            
+
             if stimulus_center_col is None or stimulus_spread_col is None:
                 print(f"    Warning: stimulus metrics not found in Excel for group {pse}_{jnd}")
                 continue
@@ -228,11 +230,11 @@ def plot_stimulus_for_model(model_name: str) -> bool:
 
         # Load all latencies from GBF files
         rows = load_group_rows(group_dir, model_name, group_idx, pse, jnd, n_subjects, OFFSET)
-        
+
         if len(rows) == 0:
             print(f"    Warning: no latencies loaded for group {pse}_{jnd}")
             continue
-        
+
         all_latencies = np.array([row['lat'] for row in rows], dtype=float)
         all_responses = np.array([row['res'] == 'true' for row in rows], dtype=bool)
 
@@ -252,12 +254,12 @@ def plot_stimulus_for_model(model_name: str) -> bool:
 
         group_data[(pse, jnd)] = {
             'model_name': model_name,
-            'stimulus_center':  stimulus_center,
-            'stimulus_spread':  stimulus_spread,
-            'all_latencies':    all_latencies,
-            'all_responses':    all_responses,
-            'results_dir':      results_dir,
-            'file_prefix':      file_prefix,
+            'stimulus_center': stimulus_center,
+            'stimulus_spread': stimulus_spread,
+            'all_latencies': all_latencies,
+            'all_responses': all_responses,
+            'results_dir': results_dir,
+            'file_prefix': file_prefix,
         }
 
     print(f"    ✓ {len(group_data)} group plots generated")
@@ -287,14 +289,14 @@ def plot_stimulus_grid_compact(model_name: str, group_data: dict,
     dpi = 300
     subplot_width_inches = 2.2
     subplot_height_inches = 1.8  # Reduced height
-    
+
     fig, axes = plt.subplots(n_pse, n_jnd,
                              figsize=(subplot_width_inches * n_jnd, subplot_height_inches * n_pse),
                              dpi=dpi)
 
     for pse_idx, pse in enumerate(pse_grid):
         for jnd_idx, jnd in enumerate(jnd_grid):
-            ax  = axes[pse_idx][jnd_idx] if n_pse > 1 else axes[jnd_idx]
+            ax = axes[pse_idx][jnd_idx] if n_pse > 1 else axes[jnd_idx]
             key = (pse, jnd)
 
             if key not in group_data:

@@ -18,7 +18,7 @@ import pandas as pd
 import numpy as np
 import logging
 
-from analysis.core.psychometric_analysis import add_group_stats_to_excel, consolidate_results
+from analysis.core.psychometric_helpers import add_group_stats_to_excel, consolidate_results
 
 logger = logging.getLogger(__name__)
 
@@ -27,30 +27,30 @@ TRIAL_BLOCKS = [40, 60, 80, 100, 120, 140, 160, 180, 200]
 
 def add_progressive_asymmetry_to_excel(excel_path, group_dir, model_name, group_idx, offset=500):
     """Add progressive asymmetry columns to Excel file."""
-    from analysis.core.psychometric_analysis import calculate_progressive_asymmetry
+    from analysis.core.psychometric_helpers import calculate_progressive_asymmetry
     from analysis.io.converter import read_gbf_file
-    
+
     try:
         df = pd.read_excel(excel_path)
-        
+
         # Process GBF files in order
         gbf_files = sorted(group_dir.glob("*.txt"))
         for idx, gbf_path in enumerate(gbf_files):
             if idx >= min(20, len(df)):
                 break
-            
+
             row = df.iloc[idx]
             if pd.isna(row.get('subj')):
                 continue
-            
+
             try:
                 # Read GBF file
                 gbf_rows = read_gbf_file(str(gbf_path))
                 rows = [{'lat': r['lat'], 'user_ans': r['user_ans']} for r in gbf_rows]
-                
+
                 # Calculate progressive asymmetry
                 prog_asymmetry = calculate_progressive_asymmetry(rows, offset)
-                
+
                 # Add to dataframe
                 for n_trials, asym_idx in prog_asymmetry.items():
                     col_name = f'asymmetry_{n_trials}'
@@ -59,11 +59,11 @@ def add_progressive_asymmetry_to_excel(excel_path, group_dir, model_name, group_
                     df.at[idx, col_name] = asym_idx
             except Exception:
                 continue
-        
+
         # Save Excel
         df.to_excel(excel_path, index=False)
         return True
-        
+
     except Exception as e:
         logger.error(f"Error adding asymmetry to {excel_path}: {e}")
         return False
@@ -71,52 +71,52 @@ def add_progressive_asymmetry_to_excel(excel_path, group_dir, model_name, group_
 
 def add_progressive_lat_entropy_to_excel(excel_path, group_dir, model_name, group_idx, pse, jnd):
     """Add progressive lat_entropy columns to Excel file."""
-    from analysis.core.psychometric_analysis import calculate_latency_statistics
+    from analysis.core.psychometric_helpers import calculate_latency_statistics
     from analysis.io.converter import read_gbf_file
-    
+
     try:
         df = pd.read_excel(excel_path)
-        
+
         # Check if already exists
         existing_cols = [col for col in df.columns if col.startswith('lat_entropy_')]
         if existing_cols:
             return True
-        
+
         # Process GBF files in order
         gbf_files = sorted(group_dir.glob("*.txt"))
         for idx, gbf_path in enumerate(gbf_files):
             if idx >= min(20, len(df)):
                 break
-            
+
             row = df.iloc[idx]
             if pd.isna(row.get('subj')):
                 continue
-            
+
             try:
                 # Read GBF file
                 gbf_rows = read_gbf_file(str(gbf_path))
                 latencies = np.array([r['lat'] for r in gbf_rows], dtype=float)
-                
+
                 # Calculate progressive lat_entropy
                 for block_size in TRIAL_BLOCKS:
                     if block_size > len(latencies):
                         break
-                    
+
                     lat_block = latencies[:block_size]
                     stats = calculate_latency_statistics(lat_block)
                     lat_entropy = stats['lat_entropy']
-                    
+
                     col_name = f'lat_entropy_{block_size}'
                     if col_name not in df.columns:
                         df[col_name] = np.nan
                     df.at[idx, col_name] = lat_entropy
             except Exception:
                 continue
-        
+
         # Save Excel
         df.to_excel(excel_path, index=False)
         return True
-        
+
     except Exception as e:
         logger.error(f"Error adding lat_entropy to {excel_path}: {e}")
         return False
@@ -124,7 +124,7 @@ def add_progressive_lat_entropy_to_excel(excel_path, group_dir, model_name, grou
 
 def add_progressive_stimulus_metrics_to_excel(excel_path, group_dir, model_name, group_idx):
     """Add progressive stimulus metrics columns to Excel file."""
-    from analysis.core.psychometric_analysis import calculate_progressive_stimulus_metrics
+    from analysis.core.psychometric_helpers import calculate_progressive_stimulus_metrics
     from analysis.io.converter import read_gbf_file
     
     try:

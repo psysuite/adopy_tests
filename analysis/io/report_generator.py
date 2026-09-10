@@ -1,145 +1,140 @@
 """
 Report generator module for creating Excel outputs.
 
-This module provides functionality to generate Excel reports in both
-wide format (one row per subject) and long format (9 rows per subject).
+Unified functions for generating Excel reports in both wide and long formats
+for BOTH synthetic and real data with the same code path.
+
+For SYNTHETIC data:
+  - Wide: One row per subject with all metrics
+  - Long: Multiple rows per subject (one per trial block)
+  - Metadata: model, pse_true, jnd_true, subject_id, group
+  - Metrics: trial_block, pse_est, jnd_est, stimulus_center, ..., posterior_sd_pse_*, ...
+
+For REAL data:
+  - Wide: One row per subject with all metrics
+  - Long: Multiple rows per subject (one per trial block)
+  - Metadata: subject_id, age, gender, modality, algorithm, group
+  - Metrics: n_trials, trial_block, pse, jnd, SC, SS, lat_entropy, ...
 """
 
-from typing import List
+from pathlib import Path
+from typing import Optional
 import pandas as pd
 import os
+import logging
 
-from analysis.core.progressive_analyzer import ProgressiveResult
+logger = logging.getLogger(__name__)
 
 
-def generate_wide_format(results: List[ProgressiveResult], 
-                         output_path: str) -> None:
+
+
+def save_wide_format_to_excel(df_wide: pd.DataFrame, output_path: str) -> bool:
     """
-    Generate wide format Excel report (one row per subject).
-    
+    Save wide format DataFrame to Excel file.
+
     Args:
-        results: List of ProgressiveResult objects
+        df_wide: DataFrame with one row per subject
         output_path: Path for output Excel file
-        
-    Output columns:
-        - Metadata: subj, age, gender, modality, algorithm, group
-        - Parameters: pse_40, pse_60, ..., pse_200
-        - Parameters: jnd_40, jnd_60, ..., jnd_200
-        - Statistics: SC_40, ..., SC_200 (stimulus center)
-        - Statistics: SS_40, ..., SS_200 (stimulus spread)
-        - Statistics: lat_range_40, ..., lat_range_200
-        - Statistics: lat_entropy_40, ..., lat_entropy_200
-        
-    Implementation:
-        - Use pandas DataFrame for data organization
-        - Write to Excel using openpyxl engine
-        - Handle NaN values appropriately
+
+    Returns:
+        True if successful, False otherwise
     """
-    if not results:
-        print("No results to write (wide format)")
-        return
-    
-    # Build data rows
-    rows = []
-    
-    for result in results:
-        row = {
-            'subj': result.metadata.subject_id,
-            'age': result.metadata.age,
-            'gender': result.metadata.gender,
-            'modality': result.metadata.modality,
-            'algorithm': result.metadata.algorithm,
-            'group': result.metadata.group,
-        }
-        
-        # Add PSE values for each trial count
-        for N in result.trial_counts:
-            row[f'pse_{N}'] = result.pse_values.get(N, float('nan'))
-        
-        # Add JND values for each trial count
-        for N in result.trial_counts:
-            row[f'jnd_{N}'] = result.jnd_values.get(N, float('nan'))
-        
-        # Add latency statistics for each trial count
-        for N in result.trial_counts:
-            row[f'SC_{N}'] = result.lat_mean.get(N, float('nan'))
-        
-        for N in result.trial_counts:
-            row[f'SS_{N}'] = result.lat_std.get(N, float('nan'))
-        
-        for N in result.trial_counts:
-            row[f'lat_range_{N}'] = result.lat_range.get(N, float('nan'))
-        
-        for N in result.trial_counts:
-            row[f'lat_entropy_{N}'] = result.lat_entropy.get(N, float('nan'))
-        
-        rows.append(row)
-    
-    # Create DataFrame
-    df = pd.DataFrame(rows)
-    
-    # Ensure output directory exists
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    
-    # Write to Excel
-    df.to_excel(output_path, index=False, engine='openpyxl')
-    
-    print(f"Wide format: {output_path}")
+    try:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        df_wide.to_excel(output_path, index=False, engine='openpyxl')
+        logger.info(f"✓ Saved wide format: {output_path} ({len(df_wide)} rows)")
+        return True
+    except Exception as e:
+        logger.error(f"✗ Error saving wide format to {output_path}: {e}")
+        return False
 
 
-def generate_long_format(results: List[ProgressiveResult], 
-                         output_path: str) -> None:
+def generate_long_format_from_dataframe(df_wide: pd.DataFrame, data_type: str = 'synthetic') -> pd.DataFrame:
     """
-    Generate long format Excel report (9 rows per subject).
-    
+    Convert wide format DataFrame to long format (one row per subject per trial_block).
+
+    Wide format: One row per subject with columns like pse_40, pse_60, ..., pse_200, jnd_40, etc.
+    Long format: One row per subject per trial_block with metric columns (pse, jnd, SC, SS, etc.)
+
     Args:
-        results: List of ProgressiveResult objects
-        output_path: Path for output Excel file
-        
-    Output columns:
-        - Metadata: subj, age, gender, modality, algorithm, group
-        - Trial count: n_trials
-        - Parameters: pse, jnd
-        - Statistics: SC (stimulus center), SS (stimulus spread), lat_range, lat_entropy
-        
-    Implementation:
-        - Create one row per (subject, trial_count) combination
-        - Use pandas DataFrame with flat structure
-        - Write to Excel using openpyxl engine
+        df_wide: DataFrame in wide format
+        data_type: 'synthetic' or 'real' (determines metadata columns)
+
+    Returns:
+        DataFrame in long format with one row per subject per trial_block
     """
-    if not results:
-        print("No results to write (long format)")
-        return
-    
-    # Build data rows
-    rows = []
-    
-    for result in results:
-        for N in result.trial_counts:
-            row = {
-                'subj': result.metadata.subject_id,
-                'age': result.metadata.age,
-                'gender': result.metadata.gender,
-                'modality': result.metadata.modality,
-                'algorithm': result.metadata.algorithm,
-                'group': result.metadata.group,
-                'n_trials': N,
-                'pse': result.pse_values.get(N, float('nan')),
-                'jnd': result.jnd_values.get(N, float('nan')),
-                'SC': result.lat_mean.get(N, float('nan')),
-                'SS': result.lat_std.get(N, float('nan')),
-                'lat_range': result.lat_range.get(N, float('nan')),
-                'lat_entropy': result.lat_entropy.get(N, float('nan')),
-            }
-            rows.append(row)
-    
-    # Create DataFrame
-    df = pd.DataFrame(rows)
-    
-    # Ensure output directory exists
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    
-    # Write to Excel
-    df.to_excel(output_path, index=False, engine='openpyxl')
-    
-    print(f"Long format: {output_path}")
+    if df_wide.empty:
+        return pd.DataFrame()
+
+    # Identify trial block columns (pse_40, pse_60, jnd_40, etc.)
+    trial_block_columns = {}  # trial_block -> list of columns for that block
+
+    for col in df_wide.columns:
+        # Columns like 'pse_40', 'jnd_60', 'SC_40', 'lat_entropy_80', etc.
+        if '_' in col:
+            parts = col.rsplit('_', 1)
+            if len(parts) == 2 and parts[1].isdigit():
+                trial_block = int(parts[1])
+                if trial_block not in trial_block_columns:
+                    trial_block_columns[trial_block] = []
+                trial_block_columns[trial_block].append(col)
+
+    if not trial_block_columns:
+        logger.warning("No trial block columns found in wide format")
+        return pd.DataFrame()
+
+    # Identify metadata columns (everything that's not metric-related)
+    metric_cols = set()
+    for cols in trial_block_columns.values():
+        metric_cols.update(cols)
+
+    metadata_cols = [col for col in df_wide.columns if col not in metric_cols]
+
+    # Build long format
+    long_rows = []
+
+    for _, wide_row in df_wide.iterrows():
+        # Get metadata for this subject
+        metadata = {col: wide_row[col] for col in metadata_cols}
+
+        # Create one row per trial block
+        for trial_block in sorted(trial_block_columns.keys()):
+            long_row = dict(metadata)
+            long_row['trial_block'] = trial_block
+
+            # Add metric values for this trial block
+            for col in trial_block_columns[trial_block]:
+                # Strip trial_block suffix to get metric name
+                metric_name = col.rsplit('_', 1)[0]
+                long_row[metric_name] = wide_row[col]
+
+            long_rows.append(long_row)
+
+    df_long = pd.DataFrame(long_rows)
+
+    # Reorder columns: metadata first, then trial_block, then metrics
+    col_order = metadata_cols + ['trial_block'] + sorted([col for col in df_long.columns if col not in metadata_cols + ['trial_block']])
+    df_long = df_long[[col for col in col_order if col in df_long.columns]]
+
+    return df_long
+
+
+def save_long_format_to_excel(df_long: pd.DataFrame, output_path: str) -> bool:
+    """
+    Save long format DataFrame to Excel file.
+
+    Args:
+        df_long: DataFrame in long format
+        output_path: Path for output Excel file
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        df_long.to_excel(output_path, index=False, engine='openpyxl')
+        logger.info(f"✓ Saved long format: {output_path} ({len(df_long)} rows)")
+        return True
+    except Exception as e:
+        logger.error(f"✗ Error saving long format to {output_path}: {e}")
+        return False

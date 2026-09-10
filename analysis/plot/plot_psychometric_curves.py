@@ -22,23 +22,24 @@ from pathlib import Path
 from itertools import product
 
 import matplotlib
+
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import numpy as np
+from utilities.misc_generate_responses import get_jnd_from_sigma
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from analysis.core.plotting import plot_group_psychometric, load_group_rows, fit_psychometric_curve, plot_generic_grid
+from analysis.plot.plotting import plot_group_psychometric, load_group_rows, fit_psychometric_curve, plot_generic_grid
 
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
 
-MODELS   = ["ABS1", "REL1", "REL2"]
+MODELS = ["ABS1", "REL1", "REL2"]
 PSE_GRID = [480, 500, 520]
 JND_GRID = [20, 40, 60]
-OFFSET   = 500
+OFFSET = 500
+
 
 # ============================================================================
 # GRID PLOTTING
@@ -47,33 +48,34 @@ OFFSET   = 500
 def plot_psychometric_into_axes(ax, data_entry, pse, jnd, offset=OFFSET):
     """Plot psychometric curve into provided axes (for grid assembly)."""
     rows = data_entry['rows']
-    
+
     if not rows:
         ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
         return
-    
+
     stimuli = [row['lat'] for row in rows]
     responses = [row['user_ans'] for row in rows]
-    
+
     result = fit_psychometric_curve(stimuli, responses, offset=offset)
     if result[0] is None:
         ax.text(0.5, 0.5, 'Insufficient data', ha='center', va='center', transform=ax.transAxes)
         return
-    
+
     mu, sigma, x_fit, y_fit, bins_valid, f = result
-    jnd_est = sigma * 0.6745
-    
+    jnd_est = get_jnd_from_sigma(sigma)
+
     ax.plot(x_fit, y_fit, 'b-', linewidth=2, alpha=0.7, label=f'Fit: μ={mu:.1f}, JND={jnd_est:.1f}')
     ax.plot(bins_valid, f, 'ro', markersize=8, alpha=0.7, label='Data')
     ax.axvline(offset, color='g', linestyle='--', linewidth=2, alpha=0.7, label=f'True ({offset}ms)')
     ax.axhline(0.5, color='gray', linestyle=':', alpha=0.5)
-    
+
     ax.set_xlabel('Stimulus latency (ms)', fontsize=10)
     ax.set_ylabel('P(response = 1)', fontsize=10)
     ax.set_title(f'PSE={pse}, JND={jnd}', fontsize=10)
     ax.set_ylim(-0.05, 1.05)
     ax.legend(fontsize=8, loc='best')
     ax.grid(True, alpha=0.3)
+
 
 # ============================================================================
 # MAIN PER MODEL

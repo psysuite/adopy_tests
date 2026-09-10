@@ -18,6 +18,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.stats import norm
 from scipy.optimize import curve_fit
+from utilities.misc_generate_responses import get_jnd_from_sigma
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -275,7 +276,7 @@ def plot_group_psychometric(all_rows_list, output_dir, file_prefix, offset, grou
         return
 
     mu, sigma, x_fit, y_fit, bins_valid, f = result
-    jnd = sigma * 0.6745  # Convert sigma to JND
+    jnd = get_jnd_from_sigma(sigma)  # Convert sigma to JND (logistic semi-IQR)
 
     # Plot
     plt.figure(figsize=(10, 6))
