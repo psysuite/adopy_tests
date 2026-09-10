@@ -43,8 +43,8 @@ class SimulationEngine:
         ntrials: int,
         ado_params: Dict,
         bis_params: Dict,
-        fixed_trials_config: Dict = None,
-        subject_id: int = None,
+        subject_id: int,
+        fixed_trials_config: Dict|None = None
     ) -> Tuple[List[Dict], Dict]:
         """
         Simulate experiment for a single subject.
@@ -152,7 +152,7 @@ class SimulationEngine:
             'sigma': sigma,
             'mu': pse,
             'n_trials': ntrials,
-            'accuracy': np.mean([r['user_ans'] for r in rows]),
+            'accuracy': np.mean([int(r['res'] == 'true') for r in rows]),
             'model': 'ABS1',
             'posteriors': posteriors_trajectory
         }
@@ -242,7 +242,7 @@ class SimulationEngine:
             'sigma': sigma,
             'mu': pse,
             'n_trials': ntrials,
-            'accuracy': np.mean([r['user_ans'] for r in rows]),
+            'accuracy': np.mean([int(r['res'] == 'true') for r in rows]),
             'model': 'REL1',
             'posteriors': posteriors_trajectory
         }
@@ -340,7 +340,7 @@ class SimulationEngine:
             'sigma': sigma,
             'mu': pse,
             'n_trials': ntrials,
-            'accuracy': np.mean([r['user_ans'] for r in rows]),
+            'accuracy': np.mean([int(r['res'] == 'true') for r in rows]),
             'model': 'REL2',
             'posteriors_pre': posteriors_trajectory_pre,
             'posteriors_post': posteriors_trajectory_post,

@@ -1,11 +1,6 @@
 """
 Unified metrics calculator for all analysis metrics from GBF data.
 
-Consolidates logic from:
-- generate_analysis_data.py (progressive metrics assembly)
-- psychometric_helpers.py (fitting, stability, statistics)
-- multithreading_utils.py (ProgressiveAnalyzer)
-- posterior_analysis2.py (Level B posterior extraction)
 
 Handles both synthetic data (with ground_truth PSE/JND) and real data (without).
 
@@ -18,17 +13,17 @@ Metrics calculated (B1-B5):
 """
 
 import logging
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
+
 import numpy as np
 
+from analysis.core.extract_posterior_convergence import PosteriorExtractor
 from analysis.core.psychometric_helpers import (
     fit_logistic_psychometric,
     calculate_stability_from_values,
     calculate_latency_statistics,
     calculate_progressive_asymmetry,
 )
-from analysis.core.extract_posterior_convergence import PosteriorExtractor
-from analysis.io.converter import read_gbf_file
 
 logger = logging.getLogger(__name__)
 
@@ -238,13 +233,14 @@ class MetricsCalculator:
             result = {}
             
             # Build result dict with posterior SD at each block
-            for i, block_size in enumerate(self.trial_blocks):
-                if i >= len(posterior_trajectory['pse_sd']):
-                    break
-                
-                result[f'posterior_sd_pse_{block_size}'] = float(posterior_trajectory['pse_sd'][i])
-                result[f'posterior_sd_jnd_{block_size}'] = float(posterior_trajectory['jnd_sd'][i])
-            
+            trial_numbers = posterior_trajectory['trial_numbers']
+
+            for block_size in self.trial_blocks:
+                idx = np.argmax(trial_numbers >= block_size)
+                if idx < len(posterior_trajectory['pse_sd']):
+                    result[f'posterior_sd_pse_{block_size}'] = float(posterior_trajectory['pse_sd'][idx])
+                    result[f'posterior_sd_jnd_{block_size}'] = float(posterior_trajectory['jnd_sd'][idx])
+
             return result
             
         except Exception as e:

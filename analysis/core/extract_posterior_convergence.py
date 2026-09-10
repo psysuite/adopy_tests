@@ -11,16 +11,15 @@ and decreases monotonically as trials accumulate information.
 
 import numpy as np
 import pandas as pd
-from pathlib import Path
 from typing import Dict, List, Tuple, Any
 from adopy.tasks.psi import Task2AFC, ModelLogistic, EnginePsi
-from utilities.misc_generate_responses import get_jnd_from_sigma, get_sigma_from_jnd
+from utilities.misc_generate_responses import get_sigma_from_jnd
 
 
 class PosteriorExtractor:
     """Extract posterior evolution from trial sequences."""
 
-    def __init__(self, model_type: str = 'REL1', offset: int = 500):
+    def __init__(self, model_type: str = 'ABS1', offset: int = 500):
         """
         Args:
             model_type: 'ABS1', 'REL1', or 'REL2'
@@ -181,71 +180,10 @@ class PosteriorExtractor:
         responses_post = [r for r, m in zip(responses, post_mask) if m]
         
         # Extract posteriors for each model
-        posterior_pre = self._extract_single_model_trajectory(stimuli_pre, responses_pre)
-        posterior_post = self._extract_single_model_trajectory(stimuli_post, responses_post)
+        posterior_pre = self.extract_posterior_trajectory(stimuli_pre, responses_pre)
+        posterior_post = self.extract_posterior_trajectory(stimuli_post, responses_post)
         
         return posterior_pre, posterior_post
-
-    def _extract_single_model_trajectory(
-        self,
-        stimuli: List[float],
-        responses: List[int],
-    ) -> Dict[str, np.ndarray]:
-        """
-        Helper method to extract posterior for a single model.
-        Used internally by both extract_posterior_trajectory() and
-        extract_posterior_trajectory_rel2().
-        
-        Args:
-            stimuli: Stimulus values (one per trial)
-            responses: Binary responses (0 or 1, one per trial)
-
-        Returns:
-            Dictionary with posterior trajectory (same as extract_posterior_trajectory)
-        """
-        if len(stimuli) != len(responses):
-            raise ValueError("stimuli and responses must have same length")
-
-        # Create engine
-        engine = EnginePsi(self.model, self.designs, self.params)
-
-        # Storage
-        trial_numbers = []
-        pse_means = []
-        pse_sds = []
-        slope_means = []
-        slope_sds = []
-
-        # Replay trial-by-trial
-        for trial_idx, (stim, resp) in enumerate(zip(stimuli, responses)):
-            design = {'stimulus': float(stim)}
-            engine.update(design, int(resp))
-
-            trial_numbers.append(trial_idx + 1)
-
-            pse_mean = float(engine.post_mean['threshold'])
-            pse_sd = float(engine.post_sd['threshold'])
-            pse_means.append(pse_mean)
-            pse_sds.append(pse_sd)
-
-            slope_mean = float(engine.post_mean['slope'])
-            slope_sd = float(engine.post_sd['slope'])
-            slope_means.append(slope_mean)
-            slope_sds.append(slope_sd)
-
-        # Convert slope to JND
-        jnd_means = [np.log(3) / s for s in slope_means]
-        jnd_sds = [np.log(3) / (s ** 2) * sd for s, sd in zip(slope_means, slope_sds)]
-
-        return {
-            'trial_numbers': np.array(trial_numbers),
-            'pse_mean': np.array(pse_means),
-            'pse_sd': np.array(pse_sds),
-            'jnd_mean': np.array(jnd_means),
-            'jnd_sd': np.array(jnd_sds),
-            'slope_mean': np.array(slope_means),
-            'slope_sd': np.array(slope_sds),
-        }
 
 
 def calculate_convergence_metrics(

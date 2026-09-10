@@ -58,7 +58,7 @@ for i, (stim_info, pre_post, trial_type) in enumerate(trial_sequence):
         stim_q = abs(stim_ms - offset)
         print(f"\n--- TRIAL {i + 1}/{nTrials} [FIXED-{pre_post.upper()}] ---")
     else:
-        stim_q = exp.get(is_pre)
+        stim_q = exp.get()
         stim_ms = offset - stim_q if is_pre else offset + stim_q
         print(f"\n--- TRIAL {i + 1}/{nTrials} [ADAPTIVE-{pre_post.upper()}] ---")
     

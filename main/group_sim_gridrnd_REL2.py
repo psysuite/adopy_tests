@@ -87,7 +87,7 @@ def main():
     output_dir = Path(OUTPUT_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    grid = list(product(PSE_GRID_REL, JND_GRID_REL))
+    grid = list(product(PSE_GRID, JND_GRID))
     total_subjects = len(grid) * N_SUBJECTS_PER_GROUP
     print(f"Generating {len(grid)} groups × {N_SUBJECTS_PER_GROUP} subjects = {total_subjects} files")
     print(f"Output directory: {output_dir}\n")

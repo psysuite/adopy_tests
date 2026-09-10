@@ -68,8 +68,8 @@ def run_subject_simulation(task: SubjectSimulationTask) -> SubjectSimulationTask
             ntrials=task.n_trials,
             ado_params=task.ado_params,
             bis_params=task.bis_params,
-            fixed_trials_config=task.fixed_trials_config,
             subject_id=task.subject_id,
+            fixed_trials_config=task.fixed_trials_config
         )
 
         # Convert to GBF format
