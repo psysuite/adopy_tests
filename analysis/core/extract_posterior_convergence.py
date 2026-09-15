@@ -14,19 +14,20 @@ import pandas as pd
 from typing import Dict, List, Tuple, Any
 from adopy.tasks.psi import Task2AFC, ModelLogistic, EnginePsi
 from utilities.misc_generate_responses import get_sigma_from_jnd
+from main.config import TRIAL_BLOCKS, OFFSET
 
 
 class PosteriorExtractor:
     """Extract posterior evolution from trial sequences."""
 
-    def __init__(self, model_type: str = 'ABS1', offset: int = 500):
+    def __init__(self, model_type: str = 'ABS1', offset: int = None):
         """
         Args:
             model_type: 'ABS1', 'REL1', or 'REL2'
-            offset: Reference latency (default 500ms)
+            offset: Reference latency (default from config.OFFSET)
         """
         self.model_type = model_type
-        self.offset = offset
+        self.offset = offset if offset is not None else OFFSET
         self._setup_adopy()
 
     def _setup_adopy(self):
@@ -214,7 +215,7 @@ def calculate_convergence_metrics(
         - 'jnd_stability_block': First block where JND SD < 10% of final SD
     """
     if trial_blocks is None:
-        trial_blocks = [40, 60, 80, 100, 120, 140, 160, 180, 200]
+        trial_blocks = TRIAL_BLOCKS
 
     trial_numbers = posterior_data['trial_numbers']
     pse_sds = posterior_data['pse_sd']
@@ -300,7 +301,7 @@ def process_synthetic_data(
         true_values={'pse': true_pse, 'jnd': true_jnd},
     )
 
-    trial_blocks = [40, 60, 80, 100, 120, 140, 160, 180, 200]
+    trial_blocks = TRIAL_BLOCKS
 
     df = pd.DataFrame({
         'trial_block': trial_blocks,
@@ -333,7 +334,7 @@ def process_human_data(
 
     metrics = calculate_convergence_metrics(posterior)
 
-    trial_blocks = [40, 60, 80, 100, 120, 140, 160, 180, 200]
+    trial_blocks = TRIAL_BLOCKS
 
     df = pd.DataFrame({
         'trial_block': trial_blocks,

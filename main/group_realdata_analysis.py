@@ -17,6 +17,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from main.config import *
 from analysis.io.converter import convert_psa_to_gbf
 from analysis.orchestration.unified_processor import UnifiedGBFProcessor
 
@@ -82,7 +83,7 @@ def main():
                 pse_grid=None,     # Not used for real data
                 jnd_grid=None,     # Not used for real data
                 offset=500,
-                trial_blocks=[40, 60, 80, 100, 120, 140, 160, 180, 200],
+                trial_blocks=TRIAL_BLOCKS,
                 verbose=True,
             )
 

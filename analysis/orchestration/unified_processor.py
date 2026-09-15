@@ -25,6 +25,7 @@ from typing import Dict, List, Tuple, Optional, Any
 import pandas as pd
 import numpy as np
 
+from main.config import TRIAL_BLOCKS
 from analysis.orchestration.metrics import MetricsCalculator
 from analysis.io.converter import read_gbf_file
 from analysis.io.report_generator import (
@@ -54,6 +55,7 @@ class UnifiedGBFProcessor:
         offset: float = 500,
         trial_blocks: Optional[List[int]] = None,
         verbose: bool = True,
+        use_multithread: bool = True,
     ):
         """
         Initialize processor.
@@ -70,6 +72,7 @@ class UnifiedGBFProcessor:
             offset: Reference latency in ms
             trial_blocks: Trial blocks for metrics (default: [40, 60, 80, 100, 120, 140, 160, 180, 200])
             verbose: Print progress
+            use_multithread: Use multithreading for processing (default True)
         """
         self.gbf_dir = Path(gbf_dir)
         self.model_name = model_name
@@ -78,8 +81,9 @@ class UnifiedGBFProcessor:
         self.pse_grid = pse_grid or []
         self.jnd_grid = jnd_grid or []
         self.offset = offset
-        self.trial_blocks = trial_blocks or [40, 60, 80, 100, 120, 140, 160, 180, 200]
+        self.trial_blocks = trial_blocks or TRIAL_BLOCKS
         self.verbose = verbose
+        self.use_multithread = use_multithread
         
         # Validate
         if data_type not in ['synthetic', 'real']:
@@ -96,10 +100,21 @@ class UnifiedGBFProcessor:
         self.df_long = None
         self._all_rows_wide = []
         self._all_rows_long = []
+        self._processed_subjects = set()  # Track which subject_id already processed
+        
+        # Multithread lock for Excel append
+        import threading
+        self._append_lock = threading.Lock()
     
     def process(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Process all GBF files in directory.
+        
+        If use_multithread=True:
+        - Load existing wide Excel (if exists, overwrite=False)
+        - Skip already-processed subjects
+        - Process remaining files in parallel
+        - Append incrementally to Excel
         
         Returns:
             (df_wide, df_long)
@@ -112,7 +127,11 @@ class UnifiedGBFProcessor:
             print(f"{'='*70}\n")
             print(f"GBF directory: {self.gbf_dir}")
             print(f"Model: {self.model_name}")
-            print(f"Data type: {self.data_type}\n")
+            print(f"Data type: {self.data_type}")
+            print(f"Multithread: {self.use_multithread}\n")
+        
+        # Load existing wide Excel if available
+        self._load_existing_wide()
         
         # Discover GBF structure
         t0 = time.time()
@@ -121,41 +140,229 @@ class UnifiedGBFProcessor:
         
         if not gbf_files:
             logger.warning(f"No GBF files found in {self.gbf_dir}")
-            return pd.DataFrame(), pd.DataFrame()
+            return self.df_wide if self.df_wide is not None else pd.DataFrame(), \
+                   self.df_long if self.df_long is not None else pd.DataFrame()
+        
+        # Filter out already-processed subjects
+        if self.data_type == 'synthetic':
+            gbf_files_to_process = [
+                (path, meta) for path, meta in gbf_files 
+                if (meta.get('subject_id'), self.model_name) not in self._processed_subjects
+            ]
+        else:  # real
+            gbf_files_to_process = [
+                (path, meta) for path, meta in gbf_files 
+                if meta.get('subj') not in self._processed_subjects
+            ]
         
         if self.verbose:
-            print(f"Found {len(gbf_files)} GBF files (discovery took {t_discover:.2f}s)\n")
+            print(f"Found {len(gbf_files)} total GBF files (discovery took {t_discover:.2f}s)")
+            if len(gbf_files_to_process) < len(gbf_files):
+                print(f"  {len(gbf_files) - len(gbf_files_to_process)} already processed, skipping")
+            print(f"  Processing {len(gbf_files_to_process)} files\n")
         
-        # Process each GBF file
+        if not gbf_files_to_process:
+            if self.verbose:
+                print("✓ All files already processed\n")
+            # Generate long format from existing wide if needed
+            if self.df_wide is not None and not self.df_wide.empty:
+                self.df_long = generate_long_format_from_dataframe(self.df_wide, self.data_type)
+            return self.df_wide, self.df_long
+        
+        # Process files (multithread or sequential)
         t_start = time.time()
-        for idx, (gbf_path, metadata) in enumerate(gbf_files, 1):
-            t_file_start = time.time()
-            self._process_gbf_file(gbf_path, metadata)
-            t_file = time.time() - t_file_start
-            
-            if self.verbose and idx % max(1, len(gbf_files) // 5) == 0:
-                print(f"  [{idx}/{len(gbf_files)}] {gbf_path.name} ({t_file:.3f}s)")
+        if self.use_multithread:
+            self._process_multithread(gbf_files_to_process)
+        else:
+            self._process_sequential(gbf_files_to_process)
         
         t_process = time.time() - t_start
         
         if self.verbose:
-            print(f"  Total processing time: {t_process:.2f}s ({t_process/len(gbf_files):.3f}s per file)\n")
+            print(f"  Total processing time: {t_process:.2f}s\n")
         
-        # Create DataFrames
-        t_df_start = time.time()
-        self.df_wide = pd.DataFrame(self._all_rows_wide)
-        t_df1 = time.time() - t_df_start
+        # Create/Update DataFrames
+        if self.df_wide is None or self.df_wide.empty:
+            self.df_wide = pd.DataFrame(self._all_rows_wide)
+        else:
+            # Append new rows to existing df_wide
+            if self._all_rows_wide:
+                df_new = pd.DataFrame(self._all_rows_wide)
+                self.df_wide = pd.concat([self.df_wide, df_new], ignore_index=True)
         
+        # Generate long format at the end (fast)
         t_long_start = time.time()
         self.df_long = generate_long_format_from_dataframe(self.df_wide, self.data_type)
         t_long = time.time() - t_long_start
         
         if self.verbose:
-            print(f"✓ Processing complete ({t_df1:.2f}s for wide + {t_long:.2f}s for long):")
+            print(f"✓ Processing complete ({t_long:.2f}s for long format):")
             print(f"  Wide format: {len(self.df_wide)} rows")
             print(f"  Long format: {len(self.df_long)} rows\n")
         
         return self.df_wide, self.df_long
+    
+    def _load_existing_wide(self) -> None:
+        """
+        Load existing wide Excel file and track processed subjects.
+        
+        For synthetic data: track (subject_id, model) pairs
+        For real data: track subj only (one subject = one row)
+        
+        Only called if use_multithread=True (for incremental processing).
+        """
+        wide_path = self.output_dir / 'synthetic_data_wide.xlsx'
+        if not wide_path.exists():
+            return
+        
+        try:
+            self.df_wide = pd.read_excel(wide_path)
+            
+            # Extract processed subjects - INCLUDING model for synthetic data
+            if self.data_type == 'synthetic':
+                if 'subject_id' in self.df_wide.columns and 'model' in self.df_wide.columns:
+                    # Track (subject_id, model) pairs - skip only if BOTH match
+                    self._processed_subjects = set(
+                        zip(self.df_wide['subject_id'], self.df_wide['model'])
+                    )
+            else:  # real
+                if 'subj' in self.df_wide.columns:
+                    self._processed_subjects = set(self.df_wide['subj'].unique())
+            
+            if self.verbose:
+                print(f"[INCREMENTAL] Loaded existing wide Excel: {len(self.df_wide)} rows")
+                print(f"  Already processed {len(self._processed_subjects)} (subject, model) pairs\n")
+        
+        except Exception as e:
+            logger.warning(f"Could not load existing wide Excel: {e}")
+            self.df_wide = None
+            self._processed_subjects = set()
+    
+    def _process_sequential(self, gbf_files: List[Tuple[Path, Dict[str, Any]]]) -> None:
+        """
+        Process GBF files sequentially.
+        
+        Args:
+            gbf_files: List of (gbf_path, metadata) tuples
+        """
+        for idx, (gbf_path, metadata) in enumerate(gbf_files, 1):
+            self._process_gbf_file(gbf_path, metadata)
+            
+            if self.verbose and idx % max(1, len(gbf_files) // 5) == 0:
+                print(f"  [{idx}/{len(gbf_files)}] {gbf_path.name}")
+    
+    def _process_multithread(self, gbf_files: List[Tuple[Path, Dict[str, Any]]]) -> None:
+        """
+        Process GBF files in parallel using ThreadPoolExecutor.
+        
+        Each thread appends its result to Excel with lock protection.
+        
+        Args:
+            gbf_files: List of (gbf_path, metadata) tuples
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from main.config import MAX_WORKERS
+        
+        if self.verbose:
+            print(f"Using {MAX_WORKERS} worker threads...\n")
+        
+        processed_count = [0]  # Use list to allow modification in nested function
+        
+        def worker(gbf_path: Path, metadata: Dict[str, Any]) -> Dict[str, Any]:
+            """Process single file and return wide row."""
+            try:
+                from analysis.io.converter import read_gbf_file
+                
+                # Read GBF file
+                gbf_rows = read_gbf_file(str(gbf_path))
+                if not gbf_rows:
+                    logger.warning(f"Empty GBF file: {gbf_path}")
+                    return None
+                
+                # Extract latencies and responses
+                latencies = [float(row['lat']) for row in gbf_rows]
+                responses = [int(row['user_ans']) for row in gbf_rows]
+                
+                # Get ground truth for synthetic
+                ground_truth_pse = metadata.get('pse_true') if self.data_type == 'synthetic' else None
+                ground_truth_jnd = metadata.get('jnd_true') if self.data_type == 'synthetic' else None
+                
+                # Calculate metrics
+                model_type = self.model_name if self.data_type == 'synthetic' else 'ABS1'
+                calc = MetricsCalculator(
+                    model_type=model_type,
+                    is_synthetic=(self.data_type == 'synthetic'),
+                    ground_truth_pse=ground_truth_pse,
+                    ground_truth_jnd=ground_truth_jnd,
+                    offset=self.offset,
+                    trial_blocks=self.trial_blocks,
+                )
+                metrics = calc.calculate_all_metrics(gbf_rows=gbf_rows)
+                
+                # Create wide format row
+                wide_row = self._create_wide_row(metadata, latencies, responses, metrics)
+                return wide_row
+            
+            except Exception as e:
+                logger.error(f"Error processing {gbf_path}: {e}")
+                return None
+        
+        # Submit all tasks
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(worker, gbf_path, metadata): (gbf_path, metadata)
+                for gbf_path, metadata in gbf_files
+            }
+            
+            # Process completed tasks
+            for future in as_completed(futures):
+                gbf_path, metadata = futures[future]
+                
+                try:
+                    wide_row = future.result()
+                    if wide_row:
+                        # Append to Excel with lock
+                        self._append_row_to_excel(wide_row)
+                        processed_count[0] += 1
+                        
+                        if self.verbose and processed_count[0] % max(1, len(gbf_files) // 5) == 0:
+                            print(f"  [{processed_count[0]}/{len(gbf_files)}] {gbf_path.name}")
+                
+                except Exception as e:
+                    logger.error(f"Error retrieving result for {gbf_path}: {e}")
+    
+    def _append_row_to_excel(self, wide_row: Dict[str, Any]) -> None:
+        """
+        Append a single row to the wide Excel file with lock protection.
+        
+        Args:
+            wide_row: Row dict to append
+        """
+        with self._append_lock:
+            # Load or initialize wide DataFrame
+            wide_path = self.output_dir / 'synthetic_data_wide.xlsx'
+            
+            if wide_path.exists():
+                try:
+                    df = pd.read_excel(wide_path)
+                except Exception as e:
+                    logger.warning(f"Could not read existing Excel, creating new: {e}")
+                    df = pd.DataFrame()
+            else:
+                df = pd.DataFrame()
+            
+            # Append new row
+            df = pd.concat([df, pd.DataFrame([wide_row])], ignore_index=True)
+            
+            # Write back
+            try:
+                self.output_dir.mkdir(parents=True, exist_ok=True)
+                df.to_excel(wide_path, index=False)
+            except Exception as e:
+                logger.error(f"Error appending to Excel: {e}")
+            
+            # Also append to in-memory list
+            self._all_rows_wide.append(wide_row)
     
     def _discover_gbf_files(self) -> List[Tuple[Path, Dict[str, Any]]]:
         """
@@ -192,7 +399,7 @@ class UnifiedGBFProcessor:
                         jnd_true = float(parts[3])
                         
                         metadata = {
-                            'subj_id': subj_id,
+                            'subject_id': subj_id,  # Key for incremental processing
                             'group_idx': group_idx,
                             'pse_true': pse_true,
                             'jnd_true': jnd_true,
@@ -221,7 +428,7 @@ class UnifiedGBFProcessor:
                         group = parts[5] if len(parts) > 5 else 'TD'  # TD
                         
                         metadata = {
-                            'subj': subj_id,
+                            'subj': subj_id,  # Key for incremental processing
                             'age': age,
                             'gender': gender,
                             'modality': modality,
@@ -333,7 +540,7 @@ class UnifiedGBFProcessor:
             row['model'] = self.model_name
             row['pse_true'] = metadata.get('pse_true')
             row['jnd_true'] = metadata.get('jnd_true')
-            row['subject_id'] = metadata.get('subj_id')
+            row['subject_id'] = metadata.get('subject_id')
             row['group'] = metadata.get('group_idx')
         else:  # real
             row['subj'] = metadata.get('subj')
@@ -387,3 +594,4 @@ class UnifiedGBFProcessor:
             print(f"✓ Saved long format: {long_path}")
         
         return wide_path, long_path
+

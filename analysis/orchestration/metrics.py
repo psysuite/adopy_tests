@@ -17,6 +17,7 @@ from typing import Dict, List, Optional, Any
 
 import numpy as np
 
+from main.config import TRIAL_BLOCKS
 from analysis.core.extract_posterior_convergence import PosteriorExtractor
 from analysis.core.psychometric_helpers import (
     fit_logistic_psychometric,
@@ -26,8 +27,6 @@ from analysis.core.psychometric_helpers import (
 )
 
 logger = logging.getLogger(__name__)
-
-TRIAL_BLOCKS = [40, 60, 80, 100, 120, 140, 160, 180, 200]
 
 
 class MetricsCalculator:

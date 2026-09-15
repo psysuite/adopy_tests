@@ -31,10 +31,9 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import logging
+from main.config import *
 
 logger = logging.getLogger(__name__)
-
-TRIAL_BLOCKS = [40, 60, 80, 100, 120, 140, 160, 180, 200]
 
 
 class AnalysisPlotGenerator:

@@ -4,15 +4,15 @@ Simulation engine - unified simulation logic for temporal bisection experiments.
 Centralizes subject simulation, file generation, and analysis across grid and random modes.
 """
 
-import numpy as np
-import pandas as pd
-from typing import Tuple, List, Dict
 import logging
+from typing import Tuple, List, Dict
 
-from utilities.misc_generate_responses import generate_response_lapse_guess, get_sigma_from_jnd, generate_response
-from utilities.trial_sequence import create_trial_sequence_relative, create_trial_sequence_absolute
+import numpy as np
+
 from bisection.BISAbsADOpyWrapper import BISAbsADOpyWrapper
 from bisection.BISRelADOpyWrapper import BISRelADOpyWrapper
+from utilities.misc_generate_responses import get_sigma_from_jnd, generate_response
+from utilities.trial_sequence import create_trial_sequence_relative, create_trial_sequence_absolute
 
 logger = logging.getLogger(__name__)
 
@@ -111,11 +111,36 @@ class SimulationEngine:
 
         for trial_id, (trial_info, trial_type) in enumerate(trial_sequence):
             stim_ms = trial_info if trial_type == 'fixed' else exp.get()
-            user_ans = generate_response_lapse_guess(
-                stim_ms, pse, jnd,
-                guess_rate=ado_params.get('guess_rate', 0.04),
-                lapse_rate=ado_params.get('lapse_rate', 0.04)
-            )
+
+            #  ====  OK  =================================================================================
+            user_ans = generate_response(stim_ms, pse, get_sigma_from_jnd(jnd))
+
+            # user_ans = generate_response_lapse_guess(
+            #     stim_ms, pse, jnd,
+            #     guess_rate=ado_params.get('guess_rate', 0.04),
+            #     lapse_rate=ado_params.get('lapse_rate', 0.04)
+            # )
+            #
+
+            # =====================================================================================
+
+            # user_ans = generate_response_with_guess_lapse(
+            #     stim_ms,  # Stimolo assoluto (es. 620)
+            #     pse,  # PSE (es. 481)
+            #     get_sigma_from_jnd(jnd),  # Sigma calcolato da JND
+            #     guess_rate=ado_params.get('guess_rate', 0.04),
+            #     lapse_rate=ado_params.get('lapse_rate', 0.04),
+            # )
+
+
+            # user_ans = generate_response_with_guess_lapse(
+            #     stim_ms,  # Stimolo assoluto (es. 620)
+            #     pse,  # PSE (es. 481)
+            #     get_sigma_from_jnd(jnd),  # Sigma calcolato da JND
+            #     guess_rate=0.04,  # REL1 ha guess_rate alto
+            #     lapse_rate=0.04  # Lapse standard
+            # )
+
             success = int((stim_ms > self.offset) == user_ans)
             exp.set(user_ans, stim_ms)
 
@@ -194,14 +219,56 @@ class SimulationEngine:
                 stim_q = exp.get()
                 stim_ms = self.offset - stim_q if is_pre else self.offset + stim_q
 
+            #  ====  OK  =================================================================================
+            user_ans = generate_response(stim_ms, pse, get_sigma_from_jnd(jnd))
+
+            # user_ans = generate_response_with_guess_lapse(
+            #     stim_ms,  # Stimolo assoluto (es. 620)
+            #     pse,  # PSE (es. 481)
+            #     get_sigma_from_jnd(jnd),  # Sigma calcolato da JND
+            #     guess_rate=0.5,  # REL1 ha guess_rate alto
+            #     lapse_rate=0.04  # Lapse standard
+            # )
+            # ===========================================================================================
+
             # user_ans = generate_response_lapse_guess(
-            #     stim_ms, pse, jnd,
-            #     guess_rate=ado_params.get('guess_rate', 0.04),
+            #     stim_q, 0, jnd,
+            #     guess_rate=ado_params.get('guess_rate', 0.5),
             #     lapse_rate=ado_params.get('lapse_rate', 0.04)
             # )
-            user_ans = generate_response(
-                stim_ms, pse, get_sigma_from_jnd(jnd)
-            )
+
+            # user_ans = generate_response_with_guess_lapse(
+            #     stim_ms,  # Stimolo assoluto (es. 620)
+            #     pse,  # PSE (es. 481)
+            #     get_sigma_from_jnd(jnd),  # Sigma calcolato da JND
+            #     guess_rate=0.04,  # REL1 ha guess_rate alto
+            #     lapse_rate=0.04  # Lapse standard
+            # )
+            #
+            # user_ans = generate_relative_response(
+            #     stim_ms=stim_ms,
+            #     offset=pse,
+            #     jnd=40,
+            #     sigma=40 / np.log(3),
+            # )
+            #
+            # user_ans = generate_relative_response2(
+            #     stim_ms=stim_ms,
+            #     offset=self.offset,
+            #     sigma=jnd / np.log(3),
+            #     guess_rate=ado_params.get('guess_rate', 0.5),
+            #     lapse_rate=ado_params.get('lapse_rate', 0.04),
+            # )
+
+            # user_ans = generate_response_rel(
+            #     stim_q, jnd,
+            #     guess_rate=0.5,
+            #     lapse_rate=0.04
+            # )
+
+
+
+
             success = int((stim_ms > self.offset) == user_ans)
             exp.set(success, user_ans, abs(stim_ms - self.offset), stim_ms)
 
@@ -293,11 +360,15 @@ class SimulationEngine:
                 magnitude = exp.get()
                 stim_ms = self.offset - magnitude if is_pre else self.offset + magnitude
 
-            user_ans = generate_response_lapse_guess(
-                stim_ms, pse, jnd,
-                guess_rate=ado_params.get('guess_rate', 0.04),
-                lapse_rate=ado_params.get('lapse_rate', 0.04)
-            )
+            # user_ans = generate_relative_response2(
+            #     stim_ms=stim_ms,
+            #     offset=self.offset,
+            #     sigma=sigma,
+            #     guess_rate=ado_params.get('guess_rate', 0.5),
+            #     lapse_rate=ado_params.get('lapse_rate', 0.04),
+            # )
+            user_ans = generate_response(stim_ms, pse, get_sigma_from_jnd(jnd))
+
             success = int((stim_ms > self.offset) == user_ans)
             exp.set(success, user_ans, magnitude, stim_ms)
 
