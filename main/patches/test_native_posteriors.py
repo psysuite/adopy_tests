@@ -11,11 +11,15 @@ PARALLELIZED with ThreadPoolExecutor for speed.
 Usage:
     cd /data/CODE/python/adopy_tests
     source venv/bin/activate
-    python3 main/test_native_posteriors.py 2>&1 | tee test_native_posteriors.log
+    python3 main/patches/test_native_posteriors.py 2>&1 | tee test_native_posteriors.log
 """
 
 import sys
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parent.parent.parent  # main/patches -> main -> adopy_tests
+sys.path.insert(0, str(PROJECT_ROOT))
+
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -24,9 +28,6 @@ import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 from datetime import datetime
-
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from analysis.core.extract_posterior_convergence import PosteriorExtractor
 from analysis.io.converter import read_gbf_file
@@ -40,8 +41,8 @@ OUTPUT_DIR = PROJECT_ROOT / "data" / "output" / "test_native_posteriors"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 MODELS = ['ABS1', 'REL1', 'REL2']
-MAX_WORKERS = 8  # Parallel threads
-MAX_SUBJECTS_PER_GROUP = None  # None = all 20
+MAX_WORKERS = 20  # Parallel threads
+MAX_SUBJECTS_PER_GROUP = 1  # None = all 20
 
 # Thread-safe progress counter
 progress_lock = threading.Lock()
@@ -69,12 +70,15 @@ def jnd_sd_at_blocks_from_trajectory(jnd_sds: np.ndarray,
     return values
 
 
-def extract_jnd_sd_for_file(gbf_path: Path, model_type: str) -> dict | None:
+def extract_jnd_sd_for_file(gbf_path: Path, model_type: str, jnd_true: float) -> dict | None:
     """
     Read one GBF file, extract posterior trajectory with native model.
     Returns jnd_sd at each trial block + stability_point + auc.
 
     REL2: uses max(pre, post) per block (conservative).
+    
+    stability_block: First block where |posterior_jnd_sd - jnd_true| / jnd_true < 10%
+    (i.e., posterior converges within 10% of ground truth JND)
     """
     try:
         rows = read_gbf_file(str(gbf_path))
@@ -102,11 +106,15 @@ def extract_jnd_sd_for_file(gbf_path: Path, model_type: str) -> dict | None:
         jnd_sd_blocks = jnd_sd_at_blocks_from_trajectory(jnd_sds, trial_numbers)
         final_jnd_sd = float(jnd_sds[-1]) if len(jnd_sds) > 0 else np.nan
 
-        # Stability point
+        # Stability point: first block where posterior JND within 10% of ground truth
         stability_block = None
-        for block, sd in zip(TRIAL_BLOCKS, jnd_sd_blocks):
-            if stability_block is None and not np.isnan(sd) and sd < 0.1 * final_jnd_sd:
-                stability_block = block
+        if jnd_true > 0:
+            for block, sd in zip(TRIAL_BLOCKS, jnd_sd_blocks):
+                if not np.isnan(sd):
+                    error_pct = abs(sd - jnd_true) / jnd_true * 100
+                    if error_pct < 10:  # Within 10% of ground truth
+                        stability_block = block
+                        break
 
         # AUC
         valid = [sd / (final_jnd_sd + 1e-10) for sd in jnd_sd_blocks if not np.isnan(sd)]
@@ -125,7 +133,17 @@ def extract_jnd_sd_for_file(gbf_path: Path, model_type: str) -> dict | None:
 
 def process_subject(gbf_path: Path, model_type: str, pse_center: float, jnd_center: float) -> dict | None:
     """Process one subject and print progress."""
-    result = extract_jnd_sd_for_file(gbf_path, model_type)
+    start_time = datetime.now()
+    
+    # Extract JND_true from filename
+    # Format: S17_G2_481_42_REL1.txt -> PSE_true=481, JND_true=42
+    filename_parts = gbf_path.stem.split('_')
+    try:
+        jnd_true = float(filename_parts[3])
+    except (IndexError, ValueError):
+        jnd_true = jnd_center  # Fallback to center if parsing fails
+    
+    result = extract_jnd_sd_for_file(gbf_path, model_type, jnd_true)
     
     if result is None:
         return None
@@ -134,6 +152,7 @@ def process_subject(gbf_path: Path, model_type: str, pse_center: float, jnd_cent
         'model': model_type,
         'pse_center': pse_center,
         'jnd_center': jnd_center,
+        'jnd_true': jnd_true,
         'subject': gbf_path.stem,
         'stability_block': result['stability_block'],
         'auc': result['auc'],
@@ -143,10 +162,12 @@ def process_subject(gbf_path: Path, model_type: str, pse_center: float, jnd_cent
         row[f'jnd_sd_{block}'] = result['jnd_sd_blocks'][i]
 
     # Update global counter with thread-safe print
+    elapsed = (datetime.now() - start_time).total_seconds()
     with progress_lock:
         progress_counter['count'] += 1
         print(f"  [{progress_counter['count']}] {model_type} {gbf_path.stem}: "
-              f"stab={result['stability_block']}, auc={result['auc']:.3f}")
+              f"stab={result['stability_block']}, auc={result['auc']:.3f} "
+              f"[{elapsed:.1f}s] ✓")
 
     return row
 
@@ -340,8 +361,11 @@ def main():
     df.to_csv(csv_path, index=False)
     print(f"✓ CSV:  {csv_path}")
 
-    print(f"\n✓ Done — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"✓ Output in: {OUTPUT_DIR}")
+    print(f"\n{'='*70}")
+    print(f"✓ COMPLETED — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"✓ Total subjects processed: {len(df)}")
+    print(f"✓ Output directory: {OUTPUT_DIR}")
+    print(f"{'='*70}\n")
 
 
 if __name__ == '__main__':
