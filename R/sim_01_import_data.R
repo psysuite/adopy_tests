@@ -48,3 +48,8 @@ cat("Reading data from:", sim_file_path, "\n")
 
 # Import data
 data_raw <- read_excel(sim_file_path)
+
+# Note: Data now includes progressive columns:
+# - pct_correct_40, pct_correct_60, ..., pct_correct_200: % correct responses at each trial block
+# - posterior_sd_pse_*, posterior_sd_jnd_*: Posterior uncertainty at each block
+# - pse_auc, jnd_auc: Convergence speed (time-weighted error accumulation)

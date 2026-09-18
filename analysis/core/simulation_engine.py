@@ -189,7 +189,7 @@ class SimulationEngine:
             'sigma': sigma,
             'mu': pse,
             'n_trials': ntrials,
-            'accuracy': np.mean([int(r['res'] == 'true') for r in rows]),
+            'pct_correct': np.mean([int(r['res'] == 'true') for r in rows]),
             'model': 'ABS1',
             'posteriors': posteriors_trajectory
         }
@@ -228,6 +228,9 @@ class SimulationEngine:
             if trial_type == 'fixed':
                 stim_ms = stim_info
             else:
+                # DESIGN: exp.get() intentionally called WITHOUT is_pre parameter.
+                # ADOpy should not know about pre/post context; it only returns a magnitude.
+                # is_pre is computed POST-HOC (above) to map magnitude to stimulus direction.
                 stim_q = exp.get()
                 stim_ms = self.offset - stim_q if is_pre else self.offset + stim_q
 
@@ -330,7 +333,7 @@ class SimulationEngine:
             'sigma': sigma,
             'mu': pse,
             'n_trials': ntrials,
-            'accuracy': np.mean([int(r['res'] == 'true') for r in rows]),
+            'pct_correct': np.mean([int(r['res'] == 'true') for r in rows]),
             'model': 'REL1',
             'posteriors': posteriors_trajectory
         }
@@ -378,6 +381,9 @@ class SimulationEngine:
                 stim_ms = stim_info
                 magnitude = abs(stim_ms - self.offset)
             else:
+                # DESIGN: exp.get() intentionally called WITHOUT is_pre parameter.
+                # ADOpy should not know about pre/post context; it only returns a magnitude.
+                # is_pre is computed POST-HOC (above) to map magnitude to stimulus direction.
                 magnitude = exp.get()
                 stim_ms = self.offset - magnitude if is_pre else self.offset + magnitude
 
@@ -441,7 +447,7 @@ class SimulationEngine:
             'sigma': sigma,
             'mu': pse,
             'n_trials': ntrials,
-            'accuracy': np.mean([int(r['res'] == 'true') for r in rows]),
+            'pct_correct': np.mean([int(r['res'] == 'true') for r in rows]),
             'model': 'REL2',
             'posteriors_pre': posteriors_trajectory_pre,
             'posteriors_post': posteriors_trajectory_post,

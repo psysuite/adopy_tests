@@ -50,8 +50,11 @@ def _validate_excel_path(output_path: str) -> Path:
     if path.suffix.lower() != '.xlsx':
         raise ValueError(f"Excel path must end with .xlsx: {output_path}")
     
-    # Resolve symlinks and check for path traversal
-    resolved = path.resolve()
+    # Resolve symlinks in parent (strict=False to handle non-existent paths)
+    # This avoids crash if parent directory doesn't exist yet
+    parent_resolved = path.parent.resolve(strict=False)
+    resolved = parent_resolved / path.name
+    
     project_root = Path(__file__).parent.parent.parent.resolve()
     
     try:

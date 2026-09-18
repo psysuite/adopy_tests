@@ -199,6 +199,63 @@ class MetricsCalculator:
         
         return result
 
+    # ===== B2b: PROGRESSIVE RESPONSE ACCURACY =====
+
+    def calculate_progressive_pct_correct(self, gbf_rows: List[dict]) -> Dict[str, float]:
+        """
+        Calculate percentage of correct responses at each trial block (progressive).
+        
+        For psychophysical discrimination task:
+        - Correct if: (lat > offset) == user_ans
+        - pct_correct = (# correct) / (# trials) × 100 at each trial block
+        
+        Metric: pct_correct_* = (# correct responses / # trials) × 100
+        
+        Values: 0-100 (percentage)
+        Interpretation: Higher = better subject discrimination performance
+        
+        Args:
+            gbf_rows: GBF data rows (each has 'lat' and 'user_ans' keys)
+            
+        Returns:
+            Dict with keys like:
+            - 'pct_correct_40': % correct in first 40 trials
+            - 'pct_correct_60': % correct in first 60 trials
+            - ...
+            - 'pct_correct_200': % correct in all 200 trials
+        """
+        if not gbf_rows:
+            logger.warning("Empty GBF rows for pct_correct")
+            return {f'pct_correct_{block}': np.nan for block in self.trial_blocks}
+        
+        result = {}
+        
+        for block_size in self.trial_blocks:
+            if block_size > len(gbf_rows):
+                continue
+            
+            try:
+                # Get responses for this block
+                block_rows = gbf_rows[:block_size]
+                correct_count = 0
+                
+                for row in block_rows:
+                    lat = row.get('lat', 0)
+                    user_ans = row.get('user_ans', 0)
+                    # Correct if stimulus direction matches response
+                    # lat > offset means stimulus "above" offset (e.g., post-500 in ABS1)
+                    correct_response = 1 if lat > self.offset else 0
+                    if user_ans == correct_response:
+                        correct_count += 1
+                
+                pct_correct = (correct_count / block_size) * 100.0
+                result[f'pct_correct_{block_size}'] = float(pct_correct)
+            except Exception as e:
+                logger.debug(f"Failed to calculate pct_correct at block {block_size}: {e}")
+                result[f'pct_correct_{block_size}'] = np.nan
+        
+        return result
+
     # ===== B3: POSTERIOR SD CONVERGENCE (Level B) =====
 
     def calculate_posterior_sd_convergence(self, gbf_rows: List[dict]) -> Dict[str, Any]:
@@ -296,24 +353,38 @@ class MetricsCalculator:
 
     def calculate_auc(self, progressive_dict: Dict, final_pse: float, final_jnd: float) -> Dict[str, float]:
         """
-        Calculate Area Under Curve (cumulative fit quality).
+        Calculate Area Under Curve (convergence speed metric).
         
-        AUC measures how quickly estimate converges (lower is better).
-        Reference value:
-        - For synthetic data: ground_truth_pse/jnd
-        - For real data: final_pse/jnd (block 200)
+        AUC = sum of (absolute error × trial interval) across all trial blocks.
+        
+        Trial blocks: [40, 60, 80, 100, 120, 140, 160, 180, 200]
+        Intervals: [40, 20, 20, 20, 20, 20, 20, 20, 20]
+                   (gap from 0 to first block, then 20 trials between consecutive blocks)
+        
+        Formula: AUC = sum(|estimate[block] - reference| × interval[block])
+        
+        Units: absolute ms × trial interval = "error accumulation over trial budget"
+        Interpretation: Lower AUC = faster convergence to final estimate
+        
+        Example: AUC=3000 means the subject accumulated 3000 ms×trial worth of error
+        across the convergence path. AUC=1500 converges 2× faster.
         
         Args:
-            progressive_dict: Result from calculate_progressive_psychometric()
-            final_pse: Final PSE estimate (at trial 200)
-            final_jnd: Final JND estimate (at trial 200)
+            progressive_dict: Result from calculate_progressive_psychometric() with pse_values/jnd_values
+            final_pse: Final PSE estimate (reference for synthetic) or final estimate (real data)
+            final_jnd: Final JND estimate (reference for synthetic) or final estimate (real data)
             
         Returns:
             Dict with keys:
-            - 'pse_auc': AUC for PSE convergence
-            - 'jnd_auc': AUC for JND convergence
+            - 'pse_auc': AUC for PSE convergence (absolute, not normalized)
+            - 'jnd_auc': AUC for JND convergence (absolute, not normalized)
         """
         result = {}
+        
+        # Trial block intervals for weighting
+        # First interval: from 0 to block 40 = 40 trials
+        # Subsequent intervals: 20 trials between consecutive blocks
+        trial_block_intervals = [self.trial_blocks[0]] + list(np.diff(self.trial_blocks))
         
         pse_ref = self.ground_truth_pse if self.is_synthetic and self.ground_truth_pse is not None else final_pse
         jnd_ref = self.ground_truth_jnd if self.is_synthetic and self.ground_truth_jnd is not None else final_jnd
@@ -323,20 +394,28 @@ class MetricsCalculator:
             for pse_val in progressive_dict['pse_values']:
                 # Skip NaN values (exclude missing fits from AUC calculation)
                 if not np.isnan(pse_val):
-                    error = abs(pse_val - pse_ref) / (abs(pse_ref) + 1e-10)
+                    error = abs(pse_val - pse_ref)  # Absolute error in ms (not normalized)
                     pse_errors.append(error)
-            # AUC = mean of valid errors (or NaN if all NaN)
-            result['pse_auc'] = float(np.mean(pse_errors)) if pse_errors else np.nan
+            
+            # AUC = time-weighted sum of absolute errors
+            if pse_errors:
+                result['pse_auc'] = float(np.sum(np.array(pse_errors) * np.array(trial_block_intervals[:len(pse_errors)])))
+            else:
+                result['pse_auc'] = np.nan
         
         if 'jnd_values' in progressive_dict and jnd_ref:
             jnd_errors = []
             for jnd_val in progressive_dict['jnd_values']:
                 # Skip NaN values (exclude missing fits from AUC calculation)
                 if not np.isnan(jnd_val):
-                    error = abs(jnd_val - jnd_ref) / (abs(jnd_ref) + 1e-10)
+                    error = abs(jnd_val - jnd_ref)  # Absolute error in ms (not normalized)
                     jnd_errors.append(error)
-            # AUC = mean of valid errors (or NaN if all NaN)
-            result['jnd_auc'] = float(np.mean(jnd_errors)) if jnd_errors else np.nan
+            
+            # AUC = time-weighted sum of absolute errors
+            if jnd_errors:
+                result['jnd_auc'] = float(np.sum(np.array(jnd_errors) * np.array(trial_block_intervals[:len(jnd_errors)])))
+            else:
+                result['jnd_auc'] = np.nan
         
         return result
 
@@ -409,6 +488,9 @@ class MetricsCalculator:
             - asymmetry_index_*: Asymmetry of stimulus presentation
             - lat_entropy_*: Shannon entropy of latency distribution
             
+            **B2b - Response Accuracy (progressive):**
+            - pct_correct_*: Percentage of correct responses at each trial block
+            
             **B3 - Posterior SD Convergence (posterior uncertainty at each block):**
             - posterior_sd_pse_*: Posterior SD of PSE estimate
             - posterior_sd_jnd_*: Posterior SD of JND estimate
@@ -439,6 +521,12 @@ class MetricsCalculator:
         b2_metrics = self.calculate_progressive_latency_stats(gbf_rows)
         t_b2 = time.time() - t_b2
         result.update(b2_metrics)
+        
+        # B2b: Progressive response accuracy
+        t_b2b = time.time()
+        b2b_metrics = self.calculate_progressive_pct_correct(gbf_rows)
+        t_b2b = time.time() - t_b2b
+        result.update(b2b_metrics)
         
         # B3: Posterior SD convergence
         t_b3 = time.time()

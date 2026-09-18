@@ -179,7 +179,7 @@ def load_gbf_files_for_group(group_dir: Path, model_name: str, offset: float = 5
 
 def backfill_skip_mode(group_results: list, analysis_tasks: list, n_trials_default: int = 200) -> None:
     """
-    Fill n_trials/accuracy for subjects loaded from GBF files (skip mode).
+    Fill n_trials/pct_correct for subjects loaded from GBF files (skip mode).
     PSE/JND are read from the result_dict (already set by filename parsing).
     Falls back to progressive fit values (pse_N/jnd_N) if PSE/JND are missing,
     and prints a warning that results will be less accurate.
@@ -199,13 +199,13 @@ def backfill_skip_mode(group_results: list, analysis_tasks: list, n_trials_defau
             gbf_rows_data, rows_data = gbf_data
             n_trials = len(gbf_rows_data)
             correct = sum(1 for r in rows_data if r.get('res') == 'true')
-            accuracy = (correct / n_trials * 100) if n_trials > 0 else 0.0
+            pct_correct = (correct / n_trials * 100) if n_trials > 0 else 0.0
         else:
             n_trials = n_trials_default
-            accuracy = 0.0
+            pct_correct = 0.0
 
         result_dict['n_trials'] = n_trials
-        result_dict['accuracy'] = accuracy
+        result_dict['pct_correct'] = pct_correct
 
         # If PSE/JND missing (old filename format), fall back to progressive fit
         if result_dict.get('pse') is None:

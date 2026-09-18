@@ -152,7 +152,7 @@ class UnifiedGBFProcessor:
         if self.data_type == 'synthetic':
             gbf_files_to_process = [
                 (path, meta) for path, meta in gbf_files 
-                if (meta.get('subject_id'), self.model_name) not in self._processed_subjects
+                if (meta.get('subject_id'), self.model_name, meta.get('group_idx')) not in self._processed_subjects
             ]
         else:  # real
             gbf_files_to_process = [
@@ -223,12 +223,12 @@ class UnifiedGBFProcessor:
         try:
             self.df_wide = pd.read_excel(wide_path)
             
-            # Extract processed subjects - INCLUDING model for synthetic data
+            # Extract processed subjects - INCLUDING model and group for synthetic data
             if self.data_type == 'synthetic':
-                if 'subject_id' in self.df_wide.columns and 'model' in self.df_wide.columns:
-                    # Track (subject_id, model) pairs - skip only if BOTH match
+                if all(col in self.df_wide.columns for col in ['subject_id', 'model', 'group']):
+                    # Track (subject_id, model, group) tuples - skip only if ALL match
                     self._processed_subjects = set(
-                        zip(self.df_wide['subject_id'], self.df_wide['model'])
+                        zip(self.df_wide['subject_id'], self.df_wide['model'], self.df_wide['group'])
                     )
             else:  # real
                 if 'subj' in self.df_wide.columns:
@@ -236,7 +236,7 @@ class UnifiedGBFProcessor:
             
             if self.verbose:
                 print(f"[INCREMENTAL] Loaded existing wide Excel: {len(self.df_wide)} rows")
-                print(f"  Already processed {len(self._processed_subjects)} (subject, model) pairs\n")
+                print(f"  Already processed {len(self._processed_subjects)} (subject_id, model, group) tuples\n")
         
         except Exception as e:
             logger.warning(f"Could not load existing wide Excel: {e}")

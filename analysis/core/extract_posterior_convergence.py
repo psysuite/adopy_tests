@@ -164,47 +164,169 @@ class PosteriorExtractor:
         stimuli: List[float],
         responses: List[int],
         pre_post_labels: List[str],
-    ) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
+        metric: str = "max",
+    ) -> Dict[str, np.ndarray]:
         """
-        Extract posterior evolution for REL2 (dual-model approach).
+        Extract posterior evolution for REL2 (dual-estimator approach).
         
-        REL2 uses two separate estimators: one for pre (stimulus < 500ms)
-        and one for post (stimulus > 500ms). This method extracts posteriors
-        for each model independently.
-
+        REL2 uses two separate estimators:
+        - Pre estimator: processes pre-trials (stimulus < offset)
+        - Post estimator: processes post-trials (stimulus > offset)
+        
+        Design: Every 20 trials contain 10 pre + 10 post (alternating).
+        This method extracts posteriors aligned to global trial numbering [1-200],
+        with pre and post posteriors combined conservatively.
+        
+        Alignment strategy:
+        - For each global trial block [40, 60, 80, ..., 200]:
+          - Extract sub-trials that are pre and sub-trials that are post
+          - Combine using conservative metric (max or mean)
+        
         Args:
-            stimuli: Absolute stimulus values (one per trial)
-            responses: Binary responses (0 or 1, one per trial)
-            pre_post_labels: List of 'pre' or 'post' labels (one per trial)
-
+            stimuli: Absolute stimulus values (one per trial) [1-200]
+            responses: Binary responses (0 or 1, one per trial) [1-200]
+            pre_post_labels: List of 'pre' or 'post' labels (one per trial) [1-200]
+            metric: How to combine pre/post posteriors at each block:
+                    'max' = max(pse_sd_pre, pse_sd_post) [conservative, default]
+                    'mean' = mean(pse_sd_pre, pse_sd_post) [balanced]
+        
         Returns:
-            Tuple of (posterior_pre, posterior_post), each with same structure as
-            extract_posterior_trajectory() output.
+            Dict with keys (same structure as extract_posterior_trajectory()):
+            - 'trial_numbers': Global trial indices [1, 2, ..., 200]
+            - 'pse_mean': PSE estimates at each trial
+            - 'pse_sd': PSE posterior SDs (combined pre/post)
+            - 'jnd_mean': JND estimates at each trial
+            - 'jnd_sd': JND posterior SDs (combined pre/post)
+            - 'slope_mean': Slope estimates at each trial
+            - 'slope_sd': Slope posterior SDs (combined pre/post)
             
         Raises:
-            ValueError: if lengths don't match or model_type is not REL2
+            ValueError: if lengths don't match, model_type is not REL2, or metric is invalid
         """
         if self.model_type != 'REL2':
             raise ValueError(f"extract_posterior_trajectory_rel2() only works for REL2, not {self.model_type}")
         
         if len(stimuli) != len(responses) or len(stimuli) != len(pre_post_labels):
             raise ValueError("stimuli, responses, and pre_post_labels must have same length")
+        
+        if metric not in ['max', 'mean']:
+            raise ValueError(f"metric must be 'max' or 'mean', got {metric}")
 
-        # Separate trials by pre/post
-        pre_mask = [label == 'pre' for label in pre_post_labels]
-        post_mask = [label == 'post' for label in pre_post_labels]
+        # Separate trials by pre/post (maintaining order for pre_post_labels indexing)
+        pre_mask = np.array([label == 'pre' for label in pre_post_labels])
+        post_mask = np.array([label == 'post' for label in pre_post_labels])
         
-        stimuli_pre = [s for s, m in zip(stimuli, pre_mask) if m]
-        responses_pre = [r for r, m in zip(responses, pre_mask) if m]
+        stimuli = np.array(stimuli)
+        responses = np.array(responses)
         
-        stimuli_post = [s for s, m in zip(stimuli, post_mask) if m]
-        responses_post = [r for r, m in zip(responses, post_mask) if m]
+        stimuli_pre = stimuli[pre_mask].tolist()
+        responses_pre = responses[pre_mask].tolist()
         
-        # Extract posteriors for each model
+        stimuli_post = stimuli[post_mask].tolist()
+        responses_post = responses[post_mask].tolist()
+        
+        # Extract posteriors for each estimator (separate sequences)
         posterior_pre = self.extract_posterior_trajectory(stimuli_pre, responses_pre)
         posterior_post = self.extract_posterior_trajectory(stimuli_post, responses_post)
         
-        return posterior_pre, posterior_post
+        # Combine pre/post posteriors by reconstructing global trial alignment
+        # For each global trial, determine if it's pre or post, and take the corresponding posterior
+        trial_numbers_pre = posterior_pre['trial_numbers']  # [1, 2, ..., 100] for pre trials
+        trial_numbers_post = posterior_post['trial_numbers']  # [1, 2, ..., 100] for post trials
+        
+        # Map global trial index to (is_pre, index_in_sequence)
+        pre_idx = 0
+        post_idx = 0
+        
+        combined_trial_numbers = []
+        combined_pse_mean = []
+        combined_pse_sd = []
+        combined_jnd_mean = []
+        combined_jnd_sd = []
+        combined_slope_mean = []
+        combined_slope_sd = []
+        
+        for trial_idx, (is_pre, is_post) in enumerate(zip(pre_mask, post_mask)):
+            if is_pre:
+                if pre_idx < len(trial_numbers_pre):
+                    combined_trial_numbers.append(trial_idx + 1)  # Global trial number (1-indexed)
+                    combined_pse_mean.append(posterior_pre['pse_mean'][pre_idx])
+                    combined_pse_sd.append(posterior_pre['pse_sd'][pre_idx])
+                    combined_jnd_mean.append(posterior_pre['jnd_mean'][pre_idx])
+                    combined_jnd_sd.append(posterior_pre['jnd_sd'][pre_idx])
+                    combined_slope_mean.append(posterior_pre['slope_mean'][pre_idx])
+                    combined_slope_sd.append(posterior_pre['slope_sd'][pre_idx])
+                    pre_idx += 1
+            elif is_post:
+                if post_idx < len(trial_numbers_post):
+                    combined_trial_numbers.append(trial_idx + 1)  # Global trial number (1-indexed)
+                    combined_pse_mean.append(posterior_post['pse_mean'][post_idx])
+                    combined_pse_sd.append(posterior_post['pse_sd'][post_idx])
+                    combined_jnd_mean.append(posterior_post['jnd_mean'][post_idx])
+                    combined_jnd_sd.append(posterior_post['jnd_sd'][post_idx])
+                    combined_slope_mean.append(posterior_post['slope_mean'][post_idx])
+                    combined_slope_sd.append(posterior_post['slope_sd'][post_idx])
+                    post_idx += 1
+        
+        # Convert to arrays
+        combined_trial_numbers = np.array(combined_trial_numbers)
+        combined_pse_mean = np.array(combined_pse_mean)
+        combined_pse_sd_pre = np.array(combined_pse_sd)
+        combined_jnd_mean = np.array(combined_jnd_mean)
+        combined_jnd_sd_pre = np.array(combined_jnd_sd)
+        combined_slope_mean = np.array(combined_slope_mean)
+        combined_slope_sd_pre = np.array(combined_slope_sd)
+        
+        # Now extract at trial blocks and apply metric (max or mean of pre/post)
+        # This requires re-aligning: for each block, find all pre and post trials up to that block
+        pse_sd_final = np.zeros_like(combined_pse_sd_pre)
+        jnd_sd_final = np.zeros_like(combined_jnd_sd_pre)
+        slope_sd_final = np.zeros_like(combined_slope_sd_pre)
+        
+        # For each position in the combined array, determine if it's a "block boundary"
+        # and apply metric across pre/post within that block
+        for i, trial_num in enumerate(combined_trial_numbers):
+            # Find corresponding pre and post posteriors at this trial
+            pre_trials_up_to = np.sum(pre_mask[:trial_num])
+            post_trials_up_to = np.sum(post_mask[:trial_num])
+            
+            if pre_trials_up_to > 0 and pre_trials_up_to <= len(posterior_pre['pse_sd']):
+                pse_sd_pre_at_trial = posterior_pre['pse_sd'][pre_trials_up_to - 1]
+                jnd_sd_pre_at_trial = posterior_pre['jnd_sd'][pre_trials_up_to - 1]
+                slope_sd_pre_at_trial = posterior_pre['slope_sd'][pre_trials_up_to - 1]
+            else:
+                pse_sd_pre_at_trial = np.nan
+                jnd_sd_pre_at_trial = np.nan
+                slope_sd_pre_at_trial = np.nan
+            
+            if post_trials_up_to > 0 and post_trials_up_to <= len(posterior_post['pse_sd']):
+                pse_sd_post_at_trial = posterior_post['pse_sd'][post_trials_up_to - 1]
+                jnd_sd_post_at_trial = posterior_post['jnd_sd'][post_trials_up_to - 1]
+                slope_sd_post_at_trial = posterior_post['slope_sd'][post_trials_up_to - 1]
+            else:
+                pse_sd_post_at_trial = np.nan
+                jnd_sd_post_at_trial = np.nan
+                slope_sd_post_at_trial = np.nan
+            
+            # Apply metric (max or mean)
+            if metric == 'max':
+                pse_sd_final[i] = np.nanmax([pse_sd_pre_at_trial, pse_sd_post_at_trial])
+                jnd_sd_final[i] = np.nanmax([jnd_sd_pre_at_trial, jnd_sd_post_at_trial])
+                slope_sd_final[i] = np.nanmax([slope_sd_pre_at_trial, slope_sd_post_at_trial])
+            else:  # mean
+                pse_sd_final[i] = np.nanmean([pse_sd_pre_at_trial, pse_sd_post_at_trial])
+                jnd_sd_final[i] = np.nanmean([jnd_sd_pre_at_trial, jnd_sd_post_at_trial])
+                slope_sd_final[i] = np.nanmean([slope_sd_pre_at_trial, slope_sd_post_at_trial])
+        
+        return {
+            'trial_numbers': combined_trial_numbers,
+            'pse_mean': combined_pse_mean,
+            'pse_sd': pse_sd_final,
+            'jnd_mean': combined_jnd_mean,
+            'jnd_sd': jnd_sd_final,
+            'slope_mean': combined_slope_mean,
+            'slope_sd': slope_sd_final,
+        }
 
 
 def calculate_convergence_metrics(

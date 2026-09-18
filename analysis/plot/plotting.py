@@ -626,11 +626,7 @@ def create_phase_c_asymmetry_modulo(df_model: 'pd.DataFrame', model_name: str,
         
         # Groups at middle PSE (Logica 2: PSE row)
         # For PSE=500 (middle): G4, G5, G6
-        group_sets = [
-            ('G4', 20),
-            ('G5', 40),
-            ('G6', 60)
-        ]
+        group_sets = JND_GROUPS_AT500
         
         colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
         
@@ -720,11 +716,7 @@ def create_phase_c_asymmetry_scatter_envelope(df_model: 'pd.DataFrame', model_na
     
     try:
         # Define 3 group sets by JND (Logica 1)
-        group_sets = [
-            (['G1', 'G4', 'G7'], 20),
-            (['G2', 'G5', 'G8'], 40),
-            (['G3', 'G6', 'G9'], 60)
-        ]
+        group_sets = JND_GROUPS
         
         n_jnd = len(group_sets)
         fig, axes = plt.subplots(1, n_jnd, figsize=(6*n_jnd, 5))
@@ -819,11 +811,7 @@ def create_phase_c_stimulus_center_evolution(df_model: 'pd.DataFrame', model_nam
         fig, ax = plt.subplots(figsize=(10, 6))
         
         # Define 3 group sets by PSE
-        group_sets = [
-            (['G1', 'G2', 'G3'], 480),
-            (['G4', 'G5', 'G6'], 500),
-            (['G7', 'G8', 'G9'], 520)
-        ]
+        group_sets = PSE_GROUPS
         
         # Calculate global y-axis limits
         all_means = []
@@ -916,11 +904,7 @@ def create_phase_c_stimulus_spread_evolution(df_model: 'pd.DataFrame', model_nam
         fig, ax = plt.subplots(figsize=(10, 6))
         
         # Define 3 group sets by JND
-        group_sets = [
-            (['G1', 'G4', 'G7'], 20),
-            (['G2', 'G5', 'G8'], 40),
-            (['G3', 'G6', 'G9'], 60)
-        ]
+        group_sets = JND_GROUPS
         
         # Calculate global y-axis limits
         all_means = []
@@ -970,23 +954,6 @@ def create_phase_c_stimulus_spread_evolution(df_model: 'pd.DataFrame', model_nam
         ax.set_xticks(trial_blocks)
         ax.legend(fontsize=10)
         ax.set_ylim([y_min, y_max])
-        
-        plt.tight_layout()
-        out_path = Path(output_dir) / f'{model_name}_stimulus_spread_evolution.png'
-        plt.savefig(out_path, dpi=150, bbox_inches='tight')
-        plt.close()
-        
-        print(f"  ✓ {out_path.name}")
-        return True
-        
-    except Exception as e:
-        print(f"  ✗ Error in stimulus_spread_evolution: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-        ax.grid(True, alpha=0.3)
-        ax.set_xticks(trial_blocks)
-        ax.legend(fontsize=10, loc='best', ncol=3)
         
         plt.tight_layout()
         out_path = Path(output_dir) / f'{model_name}_stimulus_spread_evolution.png'

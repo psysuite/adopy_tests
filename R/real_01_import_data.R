@@ -22,6 +22,11 @@ cat("Reading data from:", data_file, "\n")
 # Import data
 data_raw <- read_excel(data_file)
 
+# Note: Data now includes progressive columns:
+# - pct_correct_40, pct_correct_60, ..., pct_correct_200: % correct responses at each trial block
+# - posterior_sd_pse_*, posterior_sd_jnd_*: Posterior uncertainty at each block
+# - pse_auc, jnd_auc: Convergence speed (time-weighted error accumulation)
+
 # Display structure
 # cat("\nRaw data structure:\n")
 # print(str(data_raw))
@@ -42,7 +47,10 @@ data_clean2 <- data_raw %>%
     gender = factor(gender, levels = c("f", "m"), labels = c("Female", "Male")),
     modality = factor(modality, levels = c("BISA", "BISV"), labels = c("Auditory", "Visual")),
     algorithm = factor(algorithm, levels = c("AD", "FX"), labels = c("Adaptive", "Fixed")),
-    n_trials = as.integer(n_trials)
+    n_trials = as.integer(n_trials),
+    
+    # Ensure pct_correct_* columns are numeric
+    across(starts_with("pct_correct_"), as.numeric)
   ) %>%
   
   # Remove group variable (all TD)
