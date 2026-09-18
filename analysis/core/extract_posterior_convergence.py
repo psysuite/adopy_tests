@@ -11,20 +11,32 @@ and decreases monotonically as trials accumulate information.
 
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 from adopy.tasks.psi import Task2AFC, ModelLogistic, EnginePsi
 from utilities.misc_generate_responses import get_sigma_from_jnd
 from main.config import TRIAL_BLOCKS, OFFSET
+
+# Constants for delta-method stability
+SLOPE_MIN = 1e-6  # Minimum slope to prevent division by zero or negative JND SD
 
 
 class PosteriorExtractor:
     """Extract posterior evolution from trial sequences."""
 
-    def __init__(self, model_type: str = 'ABS1', offset: int = None):
+    def __init__(self, model_type: str = 'ABS1', offset: Optional[int] = None):
         """
+        Initialize PosteriorExtractor for model type and offset.
+        
+        The extractor replays trial sequences to compute posterior mean and SD
+        at each trial, enabling measurement of convergence speed and parameter stability.
+        Uses ADOpy's EnginePsi to compute Bayesian posteriors.
+        
         Args:
-            model_type: 'ABS1', 'REL1', or 'REL2'
-            offset: Reference latency (default from config.OFFSET)
+            model_type: One of 'ABS1' (absolute), 'REL1' (relative single), 'REL2' (relative dual).
+                       Controls guess_rate, stimulus range, and parameter grids.
+            offset: Reference latency (ms) used for relative discrimination (default: config.OFFSET=500).
+                   For ABS1: not used.
+                   For REL1/REL2: reference point for pre (<500) vs post (>500).
         """
         self.model_type = model_type
         self.offset = offset if offset is not None else OFFSET
@@ -125,9 +137,17 @@ class PosteriorExtractor:
         # Convert slope to JND
         # JND = ln(3) / slope
         # Using delta method: d(JND)/d(slope) = -ln(3) / slope^2
-        jnd_means = [np.log(3) / s for s in slope_means]
-        # Delta method: SD(JND) ≈ |d(JND)/d(slope)| * SD(slope)
-        jnd_sds = [np.log(3) / (s ** 2) * sd for s, sd in zip(slope_means, slope_sds)]
+        jnd_means = []
+        jnd_sds = []
+        for s, sd in zip(slope_means, slope_sds):
+            # Guard slope against zero/negative to prevent division errors
+            s_safe = max(s, SLOPE_MIN)
+            sd_safe = max(sd, 1e-10)
+            jnd_m = np.log(3) / s_safe
+            jnd_s = np.log(3) / (s_safe ** 2) * sd_safe
+            # Ensure JND values are physically valid (positive)
+            jnd_means.append(max(jnd_m, SLOPE_MIN))
+            jnd_sds.append(max(jnd_s, SLOPE_MIN))
 
         return {
             'trial_numbers': np.array(trial_numbers),
@@ -189,8 +209,8 @@ class PosteriorExtractor:
 
 def calculate_convergence_metrics(
     posterior_data: Dict[str, np.ndarray],
-    true_values: Dict[str, float] = None,
-    trial_blocks: List[int] = None,
+    true_values: Optional[Dict[str, float]] = None,
+    trial_blocks: Optional[List[int]] = None,
 ) -> Dict[str, Any]:
     """
     Calculate convergence metrics from posterior trajectory.

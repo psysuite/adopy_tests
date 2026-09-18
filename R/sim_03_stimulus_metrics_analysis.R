@@ -1,6 +1,6 @@
 # ============================================================================== =
 # 08_stimulus_metrics_analysis.R
-# Analysis of stimulus metrics: asymmetry_index, stimulus_center, 
+# Analysis of stimulus metrics: asymmetry, stimulus_center, 
 # stimulus_spread
 # ============================================================================== =
 
@@ -73,7 +73,7 @@ stimulus_metrics_final <- data_clean %>%
   dplyr::filter(trial_block == 200) %>%
   dplyr::select(
     model, group, pse_true, jnd_true, subject_id,
-    asymmetry_index, stimulus_center, stimulus_spread
+    asymmetry, stimulus_center, stimulus_spread
   ) %>%
   dplyr::mutate(
     pse_true_z = scale(pse_true)[,1],

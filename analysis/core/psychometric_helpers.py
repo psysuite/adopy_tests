@@ -66,15 +66,17 @@ class ValidationResult:
 def calculate_stability_from_values(
     values: list,
     threshold: float = 0.10,
-    blocks: List[int] = None
+    blocks: List[int] = None,
+    reference_value: float = None
 ) -> int:
     """
-    Find the first block where a parameter is within threshold% of its final value.
+    Find the first block where a parameter is within threshold% of a reference value.
 
     Args:
         values: Parameter values at each block [40, 60, 80, ...]
         threshold: Fractional threshold, e.g. 0.10 = 10%
         blocks: Block sizes corresponding to values (default: [40,60,...,200])
+        reference_value: Reference value for stability (default: final value in list)
 
     Returns:
         Block number where parameter first stabilizes, or 200 if never stable.
@@ -85,13 +87,14 @@ def calculate_stability_from_values(
     if blocks is None:
         blocks = [40, 60, 80, 100, 120, 140, 160, 180, 200][:len(values)]
 
-    final_value = values[-1]
+    # Use provided reference or last value
+    ref_value = reference_value if reference_value is not None else values[-1]
 
-    if abs(final_value) < 1e-10:
+    if abs(ref_value) < 1e-10:
         return 200
 
     for i, block in enumerate(blocks):
-        diff_pct = abs(values[i] - final_value) / abs(final_value) * 100
+        diff_pct = abs(values[i] - ref_value) / abs(ref_value) * 100
         if diff_pct < threshold * 100:
             return block
 

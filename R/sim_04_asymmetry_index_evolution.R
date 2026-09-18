@@ -1,6 +1,6 @@
 # ============================================================================== =
-# 10_asymmetry_index_evolution.R
-# Analysis of Asymmetry Index evolution across trial blocks
+# 10_asymmetry_evolution.R
+# Analysis of Asymmetry evolution across trial blocks
 # PRIMARY: AI and |AI| evolution as ordered categorical
 # SECONDARY: Early vs Late comparison
 # ============================================================================== =
@@ -57,7 +57,7 @@ data_clean <- data_raw %>%
     group = factor(group),  # Preserve group column
     trial_block = as.numeric(trial_block),
     trial_block_f = factor(trial_block),
-    asymmetry_index_abs = abs(asymmetry_index),
+    asymmetry_abs = abs(asymmetry),
     pse_true_z = scale(pse_true)[,1],
     jnd_true_z = scale(jnd_true)[,1]
   ) %>%
@@ -79,12 +79,12 @@ ai_trajectory <- data_clean %>%
   group_by(model, trial_block) %>%
   summarise(
     n = n(),
-    mean_ai = mean(asymmetry_index, na.rm = TRUE),
-    sd_ai = sd(asymmetry_index, na.rm = TRUE),
+    mean_ai = mean(asymmetry, na.rm = TRUE),
+    sd_ai = sd(asymmetry, na.rm = TRUE),
     se_ai = sd_ai / sqrt(n),
-    median_ai = median(asymmetry_index, na.rm = TRUE),
-    min_ai = min(asymmetry_index, na.rm = TRUE),
-    max_ai = max(asymmetry_index, na.rm = TRUE),
+    median_ai = median(asymmetry, na.rm = TRUE),
+    min_ai = min(asymmetry, na.rm = TRUE),
+    max_ai = max(asymmetry, na.rm = TRUE),
     .groups = "drop"
   )
 
@@ -98,12 +98,12 @@ aiabs_trajectory <- data_clean %>%
   group_by(model, trial_block) %>%
   summarise(
     n = n(),
-    mean_ai_abs = mean(asymmetry_index_abs, na.rm = TRUE),
-    sd_ai_abs = sd(asymmetry_index_abs, na.rm = TRUE),
+    mean_ai_abs = mean(asymmetry_abs, na.rm = TRUE),
+    sd_ai_abs = sd(asymmetry_abs, na.rm = TRUE),
     se_ai_abs = sd_ai_abs / sqrt(n),
-    median_ai_abs = median(asymmetry_index_abs, na.rm = TRUE),
-    min_ai_abs = min(asymmetry_index_abs, na.rm = TRUE),
-    max_ai_abs = max(asymmetry_index_abs, na.rm = TRUE),
+    median_ai_abs = median(asymmetry_abs, na.rm = TRUE),
+    min_ai_abs = min(asymmetry_abs, na.rm = TRUE),
+    max_ai_abs = max(asymmetry_abs, na.rm = TRUE),
     .groups = "drop"
   )
 
@@ -126,7 +126,7 @@ stimulus_metrics_final <- data_clean %>%
   ) %>%
   dplyr::select(
     model, group, pse_true, pse_true_z, jnd_true, jnd_true_z, subject_id,
-    asymmetry_index, asymmetry_index_abs
+    asymmetry, asymmetry_abs
   )
 
 
@@ -150,7 +150,7 @@ cat("\n--- 1. Final Value Test (Trial Block 200, N=200) ---\n")
 # AI final values - test against 0 with covariates
 cat("\nOne-sample test: AI ~ 0 (controlling for pse_true_z, jnd_true_z)\n")
 
-anova_ai_final <- aovperm(asymmetry_index ~ pse_true_z + jnd_true_z,
+anova_ai_final <- aovperm(asymmetry ~ pse_true_z + jnd_true_z,
                           data = stimulus_metrics_final_abs1,
                           np = 5000)
 cat("ANOVA results:\n")
@@ -165,7 +165,7 @@ effect_sizes_ai_final <- extract_eta_squared(anova_ai_final)
 print_effect_sizes(effect_sizes_ai_final, "Effect Sizes for AI Final (η²)")
 
 # Descriptive stats
-ai_final <- stimulus_metrics_final_abs1$asymmetry_index
+ai_final <- stimulus_metrics_final_abs1$asymmetry
 cat("\n  Mean AI:", round(mean(ai_final, na.rm = TRUE), 4), "\n")
 cat("  SD AI:", round(sd(ai_final, na.rm = TRUE), 4), "\n")
 cohens_d_ai <- mean(ai_final, na.rm = TRUE) / sd(ai_final, na.rm = TRUE)
@@ -174,7 +174,7 @@ cat("  Cohen's d (vs 0):", round(cohens_d_ai, 4), "\n")
 # |AI| final values - test against 0 with covariates
 cat("\nOne-sample test: |AI| ~ 0 (controlling for pse_true_z, jnd_true_z)\n")
 
-anova_aiabs_final <- aovperm(asymmetry_index_abs ~ pse_true_z * jnd_true_z,
+anova_aiabs_final <- aovperm(asymmetry_abs ~ pse_true_z * jnd_true_z,
                              data = stimulus_metrics_final_abs1,
                              np = 5000)
 
@@ -191,7 +191,7 @@ effect_sizes_aiabs_final <- extract_eta_squared(anova_aiabs_final)
 print_effect_sizes(effect_sizes_aiabs_final, "Effect Sizes for |AI| Final (η²)")
 
 # Descriptive stats
-aiabs_final <- stimulus_metrics_final_abs1$asymmetry_index_abs
+aiabs_final <- stimulus_metrics_final_abs1$asymmetry_abs
 cat("\n  Mean |AI|:", round(mean(aiabs_final, na.rm = TRUE), 4), "\n")
 cat("  SD |AI|:", round(sd(aiabs_final, na.rm = TRUE), 4), "\n")
 cohens_d_aiabs <- mean(aiabs_final, na.rm = TRUE) / sd(aiabs_final, na.rm = TRUE)
@@ -222,7 +222,7 @@ if (file.exists(cache_ai_evo)) {
   anova_ai_evo <- readRDS(cache_ai_evo)
 } else {
   cat("Computing AI evolution ANOVA (this may take a few minutes)...\n")
-  anova_ai_evo <- aovperm(asymmetry_index ~ trial_block_f + pse_true_z + jnd_true_z + Error(subject_id/(trial_block_f)),
+  anova_ai_evo <- aovperm(asymmetry ~ trial_block_f + pse_true_z + jnd_true_z + Error(subject_id/(trial_block_f)),
                           data = data_abs1,
                           np = 5000,
                           method = "Rd_kheradPajouh_renaud")
@@ -243,7 +243,7 @@ print_effect_sizes(effect_sizes_ai_evo, "Effect Sizes for AI Evolution (η²)")
 
 # Post-hoc pairwise comparisons for AI evolution
 cat("\nPost-hoc pairwise comparisons for AI evolution (Wilcoxon signed-rank tests with FDR correction):\n")
-npar_ph_pairwise_within(data_abs1, "asymmetry_index", "trial_block_f", "subject_id", corr="fdr")
+npar_ph_pairwise_within(data_abs1, "asymmetry", "trial_block_f", "subject_id", corr="fdr")
 
 # Comparison p.value p.adjust Significant
 # <chr>        <dbl>    <dbl> <lgl>      
@@ -291,7 +291,7 @@ if (file.exists(cache_aiabs_evo)) {
   anova_aiabs_evo <- readRDS(cache_aiabs_evo)
 } else {
   cat("Computing |AI| evolution ANOVA (this may take a few minutes)...\n")
-  anova_aiabs_evo <- aovperm(asymmetry_index_abs ~ trial_block_f + pse_true_z + jnd_true_z + Error(subject_id/(trial_block_f)),
+  anova_aiabs_evo <- aovperm(asymmetry_abs ~ trial_block_f + pse_true_z + jnd_true_z + Error(subject_id/(trial_block_f)),
                              data = data_abs1,
                              np = 5000,
                              method = "Rd_kheradPajouh_renaud")
@@ -313,7 +313,7 @@ print_effect_sizes(effect_sizes_aiabs_evo, "Effect Sizes for |AI| Evolution (η�
 
 # Post-hoc pairwise comparisons for |AI| evolution
 cat("\nPost-hoc pairwise comparisons for |AI| evolution (Wilcoxon signed-rank tests with FDR correction):\n")
-npar_ph_pairwise_within(data_abs1, "asymmetry_index_abs", "trial_block_f", "subject_id", corr="fdr")
+npar_ph_pairwise_within(data_abs1, "asymmetry_abs", "trial_block_f", "subject_id", corr="fdr")
 
 
 
@@ -332,8 +332,8 @@ evolution_results <- tibble(
 cat("\n=== Saving Results ===\n")
 
 # Save descriptive statistics
-write_csv(ai_trajectory, file.path(results_filepath, "tables", "asymmetry_index_ai_trajectory.csv"))
-write_csv(aiabs_trajectory, file.path(results_filepath, "tables", "asymmetry_index_aiabs_trajectory.csv"))
+write_csv(ai_trajectory, file.path(results_filepath, "tables", "asymmetry_ai_trajectory.csv"))
+write_csv(aiabs_trajectory, file.path(results_filepath, "tables", "asymmetry_aiabs_trajectory.csv"))
 
 # Save ABS1-only analysis results
 write_csv(final_value_results, file.path(results_filepath, "tables", "asymmetry_abs1_final_value_tests.csv"))
@@ -356,7 +356,7 @@ cat("✓ Saved: ABS1 clean data for plotting\n")
 
 # Save data for plotting in paper figures (format expected by 00_create_paper_figures.R)
 asymmetry_evolution_data <- data_clean %>%
-  dplyr::select(model, trial_block, asymmetry_index, asymmetry_index_abs) %>%
+  dplyr::select(model, trial_block, asymmetry, asymmetry_abs) %>%
   filter(model == "ABS1")
 
 saveRDS(asymmetry_evolution_data, file.path(results_filepath, "models", "asymmetry_evolution_data.rds"))

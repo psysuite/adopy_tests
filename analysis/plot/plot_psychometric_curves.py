@@ -72,6 +72,7 @@ def plot_psychometric_into_axes(ax, data_entry, pse, jnd, offset=OFFSET):
     ax.set_xlabel('Stimulus latency (ms)', fontsize=10)
     ax.set_ylabel('P(response = 1)', fontsize=10)
     ax.set_title(f'PSE={pse}, JND={jnd}', fontsize=10)
+    ax.set_xlim(200, 800)
     ax.set_ylim(-0.05, 1.05)
     ax.legend(fontsize=8, loc='best')
     ax.grid(True, alpha=0.3)

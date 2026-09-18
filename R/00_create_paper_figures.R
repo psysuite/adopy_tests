@@ -8,7 +8,7 @@
 library(tidyverse)
 library(patchwork)
 library(ggplot2)
-
+library(readxl)
 cat("================================================================================\n")
 cat("CREATING PUBLICATION FIGURES\n")
 cat("================================================================================\n\n")
@@ -31,7 +31,7 @@ dir.create(file.path(sim_results_filepath, "plots"), recursive = TRUE, showWarni
 dir.create(file.path(real_results_filepath, "plots"), recursive = TRUE, showWarnings = FALSE)
 
 
-sim_results_data_input <- paste0(indata_dir, "stimulus_metrics_all_models.csv")
+sim_results_data_input <- paste0(indata_dir, "synthetic_data_long.xlsx")
 
 # ============================================================================== =
 # SIMULATION DATA FIGURES
@@ -87,7 +87,7 @@ asymmetry_evolution_data  <- readRDS(file.path(sim_results_filepath, "models", "
 lat_entropy_plot_data     <- readRDS(file.path(sim_results_filepath, "models", "lat_entropy_plot_data.rds"))
 
 # Load raw simulation data for lat_entropy boxplot
-df_sim_raw                <- read.csv(sim_results_data_input, stringsAsFactors = FALSE)
+df_sim_raw                <- read_excel(sim_results_data_input)
 df_sim_raw$model          <- factor(df_sim_raw$model, levels = c("ABS1", "REL1", "REL2"))
 df_sim_raw$trial_block    <- as.integer(df_sim_raw$trial_block)
 
@@ -100,54 +100,80 @@ data_real_clean           <- readRDS(file.path(real_results_filepath, "data_clea
 
 cat("=== Creating FIGURE 4: Models Performance ===\n")
 
-# --- PSE Convergence ---
-pse_convergence <- data_sim_clean %>%
+# --- PSE Convergence (Using pre-calculated metrics from Excel) ---
+# Read the Excel data with ground-truth based stability blocks
+df_excel_pse <- df_sim_raw %>%
+  dplyr::select(model, pse_true, subject_id, trial_block, pse, pse_stability_block) %>%
+  # Calculate error % for each subject using THEIR pse_true (with jitter)
+  mutate(
+    pse_error_pct = abs(pse - pse_true) / pse_true * 100
+  ) %>%
+  # Group by model and trial_block, average across subjects
   group_by(model, trial_block) %>%
   summarise(
-    mean_error = mean(abs(pse_error), na.rm = TRUE),
-    se_error = sd(abs(pse_error), na.rm = TRUE) / sqrt(n()),
+    mean_error_pct = mean(pse_error_pct, na.rm = TRUE),
+    se_error_pct = sd(pse_error_pct, na.rm = TRUE) / sqrt(n()),
     .groups = "drop"
   )
 
-p1_pse <- ggplot(pse_convergence, aes(x = trial_block, y = mean_error, 
-                                       color = model, fill = model)) +
+p1_pse <- ggplot(df_excel_pse, aes(x = trial_block, y = mean_error_pct, 
+                                     color = model, fill = model)) +
   geom_line(linewidth = 0.8) +
   geom_point(size = 2) +
-  geom_ribbon(aes(ymin = mean_error - se_error, ymax = mean_error + se_error),
+  geom_ribbon(aes(ymin = pmax(0, mean_error_pct - se_error_pct), 
+                  ymax = mean_error_pct + se_error_pct),
               alpha = 0.2, color = NA) +
+  geom_hline(yintercept = 10, linetype = "dashed", 
+             color = "#E41A1C", linewidth = 1, alpha = 0.8) +
+  annotate("text", x = 165, y = 11.5, label = "Stability (10%)", 
+           color = "#E41A1C", size = 2.8, fontface = "bold") +
   scale_color_manual(values = model_colors) +
   scale_fill_manual(values = model_colors) +
+  scale_y_continuous(limits = c(0, 30), breaks = seq(0, 30, 10)) +
   labs(
     title = "PSE Convergence",
     x = "Trial Block",
-    y = "Absolute Error (ms)",
+    y = "Absolute Error (%)",
     color = "Model",
     fill = "Model"
   ) +
   theme_paper() +
   theme(legend.position = "bottom")
 
-# --- JND Convergence ---
-jnd_convergence <- data_sim_clean %>%
+# --- JND Convergence (Using pre-calculated metrics from Excel) ---
+# Read the Excel data with ground-truth based stability blocks
+df_excel_jnd <- df_sim_raw %>%
+  dplyr::select(model, jnd_true, subject_id, trial_block, jnd, jnd_stability_block) %>%
+  # Calculate error % for each subject using THEIR jnd_true (with jitter)
+  mutate(
+    jnd_error_pct = abs(jnd - jnd_true) / jnd_true * 100
+  ) %>%
+  # Group by model and trial_block, average across subjects
   group_by(model, trial_block) %>%
   summarise(
-    mean_error = mean(abs(jnd_error), na.rm = TRUE),
-    se_error = sd(abs(jnd_error), na.rm = TRUE) / sqrt(n()),
+    mean_error_pct = mean(jnd_error_pct, na.rm = TRUE),
+    se_error_pct = sd(jnd_error_pct, na.rm = TRUE) / sqrt(n()),
     .groups = "drop"
   )
 
-p2_jnd <- ggplot(jnd_convergence, aes(x = trial_block, y = mean_error, 
-                                       color = model, fill = model)) +
+p2_jnd <- ggplot(df_excel_jnd, aes(x = trial_block, y = mean_error_pct, 
+                                    color = model, fill = model)) +
   geom_line(linewidth = 0.8) +
   geom_point(size = 2) +
-  geom_ribbon(aes(ymin = mean_error - se_error, ymax = mean_error + se_error),
+  geom_ribbon(aes(ymin = pmax(0, mean_error_pct - se_error_pct), 
+                  ymax = mean_error_pct + se_error_pct),
               alpha = 0.2, color = NA) +
+  geom_hline(yintercept = 10, linetype = "dashed", 
+             color = "#E41A1C", linewidth = 1, alpha = 0.8) +
+  annotate("text", x = 165, y = 11.5, label = "Stability (10%)", 
+           color = "#E41A1C", size = 2.8, fontface = "bold") +
   scale_color_manual(values = model_colors) +
   scale_fill_manual(values = model_colors) +
+  scale_y_continuous(limits = c(0, 50), breaks = seq(0, 50, 10)) +
   labs(
     title = "JND Convergence",
     x = "Trial Block",
-    y = "Absolute Error",
+    y = "Absolute Error (%)",
     color = "Model",
     fill = "Model"
   ) +
@@ -155,7 +181,7 @@ p2_jnd <- ggplot(jnd_convergence, aes(x = trial_block, y = mean_error,
   theme(legend.position = "bottom")
 
 # --- PSE Stability ---
-p3_pse_stab <- ggplot(convergence_metrics, aes(x = model, y = pse_stability_point, 
+p3_pse_stab <- ggplot(convergence_metrics, aes(x = model, y = pse_stability_block, 
                                                 fill = model)) +
   geom_boxplot(alpha = 0.7, outlier.shape = 21, outlier.size = 1.5, color = "black", linewidth = 0.4) +
   geom_jitter(width = 0.2, alpha = 0.3, size = 1.5) +
@@ -170,7 +196,7 @@ p3_pse_stab <- ggplot(convergence_metrics, aes(x = model, y = pse_stability_poin
   theme(legend.position = "none")
 
 # --- JND Stability ---
-p4_jnd_stab <- ggplot(convergence_metrics, aes(x = model, y = jnd_stability_point, 
+p4_jnd_stab <- ggplot(convergence_metrics, aes(x = model, y = jnd_stability_block, 
                                                 fill = model)) +
   geom_boxplot(alpha = 0.7, outlier.shape = 21, outlier.size = 1.5, color = "black", linewidth = 0.4) +
   geom_jitter(width = 0.2, alpha = 0.3, size = 1.5) +
@@ -185,7 +211,7 @@ p4_jnd_stab <- ggplot(convergence_metrics, aes(x = model, y = jnd_stability_poin
   theme(legend.position = "none")
 
 # --- PSE Accuracy ---
-p5_pse_acc <- ggplot(convergence_metrics, aes(x = model, y = pse_final_error_pct, 
+p5_pse_acc <- ggplot(convergence_metrics, aes(x = model, y = pse_error_pct, 
                                                fill = model)) +
   geom_boxplot(alpha = 0.7, outlier.shape = 21, outlier.size = 1.5, linewidth = 0.4) +
   geom_jitter(width = 0.2, alpha = 0.3, size = 1.5) +
@@ -200,7 +226,7 @@ p5_pse_acc <- ggplot(convergence_metrics, aes(x = model, y = pse_final_error_pct
   theme(legend.position = "none")
 
 # --- JND Accuracy ---
-p6_jnd_acc <- ggplot(convergence_metrics, aes(x = model, y = jnd_final_error_pct, 
+p6_jnd_acc <- ggplot(convergence_metrics, aes(x = model, y = jnd_error_pct, 
                                                fill = model)) +
   geom_boxplot(alpha = 0.7, outlier.shape = 21, outlier.size = 1.5, linewidth = 0.4) +
   geom_jitter(width = 0.2, alpha = 0.3, size = 1.5) +
@@ -215,7 +241,7 @@ p6_jnd_acc <- ggplot(convergence_metrics, aes(x = model, y = jnd_final_error_pct
   theme(legend.position = "none")
 
 # --- PSE AUC ---
-p7_pse_auc <- ggplot(convergence_metrics, aes(x = model, y = auc_pse, 
+p7_pse_auc <- ggplot(convergence_metrics, aes(x = model, y = pse_auc, 
                                                fill = model)) +
   geom_boxplot(alpha = 0.7, outlier.shape = 21, outlier.size = 1.5, linewidth = 0.4) +
   geom_jitter(width = 0.2, alpha = 0.3, size = 1.5) +
@@ -230,7 +256,7 @@ p7_pse_auc <- ggplot(convergence_metrics, aes(x = model, y = auc_pse,
   theme(legend.position = "none")
 
 # --- JND AUC ---
-p8_jnd_auc <- ggplot(convergence_metrics, aes(x = model, y = auc_jnd, 
+p8_jnd_auc <- ggplot(convergence_metrics, aes(x = model, y = jnd_auc, 
                                                fill = model)) +
   geom_boxplot(alpha = 0.7, outlier.shape = 21, outlier.size = 1.5, linewidth = 0.4) +
   geom_jitter(width = 0.2, alpha = 0.3, size = 1.5) +
@@ -360,12 +386,12 @@ data_abs1 <- asymmetry_evolution_data %>%
 
 data_abs1_combined <- bind_rows(
   data_abs1 %>% 
-    dplyr::select(trial_block, asymmetry_index) %>%
-    rename(value = asymmetry_index) %>%
+    dplyr::select(trial_block, asymmetry) %>%
+    rename(value = asymmetry) %>%
     mutate(type = "AI (Real)"),
   data_abs1 %>% 
-    dplyr::select(trial_block, asymmetry_index_abs) %>%
-    rename(value = asymmetry_index_abs) %>%
+    dplyr::select(trial_block, asymmetry_abs) %>%
+    rename(value = asymmetry_abs) %>%
     mutate(type = "|AI| (Absolute)")
 )
 
@@ -600,12 +626,12 @@ stability_data <- data_real_clean %>%
     jnd_stable = jnd_diff_pct < 10
   ) %>%
   summarise(
-    pse_stability_point = ifelse(any(pse_stable), min(n_trials[pse_stable]), 200),
-    jnd_stability_point = ifelse(any(jnd_stable), min(n_trials[jnd_stable]), 200),
+    pse_stability_block = ifelse(any(pse_stable), min(n_trials[pse_stable]), 200),
+    jnd_stability_block = ifelse(any(jnd_stable), min(n_trials[jnd_stable]), 200),
     .groups = "drop"
   )
 
-p_real_pse_stab <- ggplot(stability_data, aes(x = algorithm, y = pse_stability_point, fill = algorithm)) +
+p_real_pse_stab <- ggplot(stability_data, aes(x = algorithm, y = pse_stability_block, fill = algorithm)) +
   # Add connecting lines between same subject's two algorithms
   geom_line(aes(group = subj), alpha = 0.3, linewidth = 0.5, color = "gray60") +
   geom_boxplot(alpha = 0.7, outlier.shape = NA, width = 0.6) +
@@ -621,7 +647,7 @@ p_real_pse_stab <- ggplot(stability_data, aes(x = algorithm, y = pse_stability_p
   theme_paper() +
   theme(legend.position = "none")
 
-p_real_jnd_stab <- ggplot(stability_data, aes(x = algorithm, y = jnd_stability_point, fill = algorithm)) +
+p_real_jnd_stab <- ggplot(stability_data, aes(x = algorithm, y = jnd_stability_block, fill = algorithm)) +
   # Add connecting lines between same subject's two algorithms
   geom_line(aes(group = subj), alpha = 0.3, linewidth = 0.5, color = "gray60") +
   geom_boxplot(alpha = 0.5, outlier.shape = NA) +
@@ -667,20 +693,20 @@ auc_data <- data_real_clean %>%
   ) %>%
   filter(n_trials < 200) %>%
   summarise(
-    auc_pse = sum(pse_deviation * 20),
-    auc_jnd = sum(jnd_deviation * 20),
+    pse_auc = sum(pse_deviation * 20),
+    jnd_auc = sum(jnd_deviation * 20),
     .groups = "drop"
   )
 
 # Prepare data for plotting
 auc_long <- auc_data %>%
-  pivot_longer(cols = c(auc_pse, auc_jnd), 
+  pivot_longer(cols = c(pse_auc, jnd_auc), 
                names_to = "parameter", 
                values_to = "auc") %>%
   mutate(
     parameter_label = case_when(
-      parameter == "auc_pse" ~ "PSE",
-      parameter == "auc_jnd" ~ "JND"
+      parameter == "pse_auc" ~ "PSE",
+      parameter == "jnd_auc" ~ "JND"
     ),
     algorithm_label = case_when(
       algorithm == "Adaptive" ~ "AD",
@@ -710,14 +736,14 @@ p9 <- ggplot(auc_long, aes(x = algorithm, y = auc, fill = algorithm)) +
 auc_group_means <- auc_data %>%
   group_by(modality, algorithm) %>%
   summarise(
-    auc_pse_mean = mean(auc_pse, na.rm = TRUE),
-    auc_jnd_mean = mean(auc_jnd, na.rm = TRUE),
+    pse_auc_mean = mean(pse_auc, na.rm = TRUE),
+    jnd_auc_mean = mean(jnd_auc, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  pivot_wider(names_from = algorithm, values_from = c(auc_pse_mean, auc_jnd_mean)) %>%
+  pivot_wider(names_from = algorithm, values_from = c(pse_auc_mean, jnd_auc_mean)) %>%
   mutate(
-    pse_advantage = (auc_pse_mean_Fixed - auc_pse_mean_Adaptive) / auc_pse_mean_Fixed * 100,
-    jnd_advantage = (auc_jnd_mean_Fixed - auc_jnd_mean_Adaptive) / auc_jnd_mean_Fixed * 100
+    pse_advantage = (pse_auc_mean_Fixed - pse_auc_mean_Adaptive) / pse_auc_mean_Fixed * 100,
+    jnd_advantage = (jnd_auc_mean_Fixed - jnd_auc_mean_Adaptive) / jnd_auc_mean_Fixed * 100
   ) %>%
   dplyr::select(modality, pse_advantage, jnd_advantage) %>%
   pivot_longer(cols = c(pse_advantage, jnd_advantage),

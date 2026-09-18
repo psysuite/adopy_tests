@@ -16,6 +16,9 @@ from utilities.trial_sequence import create_trial_sequence_relative, create_tria
 
 logger = logging.getLogger(__name__)
 
+# Constants for delta-method stability
+SLOPE_MIN = 1e-6  # Minimum slope to prevent division by zero or negative JND SD
+
 
 class SimulationEngine:
     """Unified simulation engine for temporal bisection experiments."""
@@ -149,8 +152,17 @@ class SimulationEngine:
             pse_sd = float(exp.engine.post_sd['threshold'])
             slope_mean = float(exp.engine.post_mean['slope'])
             slope_sd = float(exp.engine.post_sd['slope'])
-            jnd_mean = np.log(3) / slope_mean
-            jnd_sd = np.log(3) / (slope_mean ** 2) * slope_sd
+            
+            # Guard slope against zero/negative to prevent division errors
+            slope_mean_safe = max(slope_mean, SLOPE_MIN)
+            slope_sd_safe = max(slope_sd, 1e-10)
+            
+            jnd_mean = np.log(3) / slope_mean_safe
+            jnd_sd = np.log(3) / (slope_mean_safe ** 2) * slope_sd_safe
+            
+            # Ensure JND values are physically valid (positive)
+            jnd_mean = max(jnd_mean, SLOPE_MIN)
+            jnd_sd = max(jnd_sd, SLOPE_MIN)
 
             posteriors_trajectory.append({
                 'trial': trial_id + 1,
@@ -277,8 +289,17 @@ class SimulationEngine:
             pse_sd = float(exp.engine.post_sd['threshold'])
             slope_mean = float(exp.engine.post_mean['slope'])
             slope_sd = float(exp.engine.post_sd['slope'])
-            jnd_mean = np.log(3) / slope_mean
-            jnd_sd = np.log(3) / (slope_mean ** 2) * slope_sd
+            
+            # Guard slope against zero/negative to prevent division errors
+            slope_mean_safe = max(slope_mean, SLOPE_MIN)
+            slope_sd_safe = max(slope_sd, 1e-10)
+            
+            jnd_mean = np.log(3) / slope_mean_safe
+            jnd_sd = np.log(3) / (slope_mean_safe ** 2) * slope_sd_safe
+            
+            # Ensure JND values are physically valid (positive)
+            jnd_mean = max(jnd_mean, SLOPE_MIN)
+            jnd_sd = max(jnd_sd, SLOPE_MIN)
 
             posteriors_trajectory.append({
                 'trial': trial_id + 1,
@@ -377,8 +398,17 @@ class SimulationEngine:
             pse_sd = float(exp.engine.post_sd['threshold'])
             slope_mean = float(exp.engine.post_mean['slope'])
             slope_sd = float(exp.engine.post_sd['slope'])
-            jnd_mean = np.log(3) / slope_mean
-            jnd_sd = np.log(3) / (slope_mean ** 2) * slope_sd
+            
+            # Guard slope against zero/negative to prevent division errors
+            slope_mean_safe = max(slope_mean, SLOPE_MIN)
+            slope_sd_safe = max(slope_sd, 1e-10)
+            
+            jnd_mean = np.log(3) / slope_mean_safe
+            jnd_sd = np.log(3) / (slope_mean_safe ** 2) * slope_sd_safe
+            
+            # Ensure JND values are physically valid (positive)
+            jnd_mean = max(jnd_mean, SLOPE_MIN)
+            jnd_sd = max(jnd_sd, SLOPE_MIN)
 
             posterior_dict = {
                 'trial': trial_id + 1,

@@ -252,33 +252,45 @@ class MetricsCalculator:
         """
         Calculate stability points (trial block where parameter stabilizes).
         
-        Stability = first block where param is within 10% of final value.
+        Stability = first block where param is within 10% of reference value.
+        - For synthetic data: reference = ground_truth_pse/jnd
+        - For real data: reference = final value (block 200)
         
         Args:
             progressive_dict: Result from calculate_progressive_psychometric()
             
         Returns:
             Dict with keys:
-            - 'pse_stability_block': Block number for PSE stability
-            - 'jnd_stability_block': Block number for JND stability
+            - 'pse_stability_block': Block number for PSE stability (or NaN if no data)
+            - 'jnd_stability_block': Block number for JND stability (or NaN if no data)
         """
         result = {}
         
-        if 'pse_values' in progressive_dict:
+        if 'pse_values' in progressive_dict and progressive_dict['pse_values']:
+            pse_ref = self.ground_truth_pse if self.is_synthetic and self.ground_truth_pse is not None else None
             pse_stability = calculate_stability_from_values(
                 progressive_dict['pse_values'],
                 threshold=0.10,
-                blocks=self.trial_blocks[:len(progressive_dict['pse_values'])]
+                blocks=self.trial_blocks[:len(progressive_dict['pse_values'])],
+                reference_value=pse_ref
             )
-            result['pse_stability_block'] = int(pse_stability)
+            # Guard: convert to int only if not None, otherwise use NaN
+            result['pse_stability_block'] = int(pse_stability) if pse_stability is not None else np.nan
+        else:
+            result['pse_stability_block'] = np.nan
         
-        if 'jnd_values' in progressive_dict:
+        if 'jnd_values' in progressive_dict and progressive_dict['jnd_values']:
+            jnd_ref = self.ground_truth_jnd if self.is_synthetic and self.ground_truth_jnd is not None else None
             jnd_stability = calculate_stability_from_values(
                 progressive_dict['jnd_values'],
                 threshold=0.10,
-                blocks=self.trial_blocks[:len(progressive_dict['jnd_values'])]
+                blocks=self.trial_blocks[:len(progressive_dict['jnd_values'])],
+                reference_value=jnd_ref
             )
-            result['jnd_stability_block'] = int(jnd_stability)
+            # Guard: convert to int only if not None, otherwise use NaN
+            result['jnd_stability_block'] = int(jnd_stability) if jnd_stability is not None else np.nan
+        else:
+            result['jnd_stability_block'] = np.nan
         
         return result
 
@@ -287,6 +299,9 @@ class MetricsCalculator:
         Calculate Area Under Curve (cumulative fit quality).
         
         AUC measures how quickly estimate converges (lower is better).
+        Reference value:
+        - For synthetic data: ground_truth_pse/jnd
+        - For real data: final_pse/jnd (block 200)
         
         Args:
             progressive_dict: Result from calculate_progressive_psychometric()
@@ -300,25 +315,28 @@ class MetricsCalculator:
         """
         result = {}
         
-        if 'pse_values' in progressive_dict and final_pse:
+        pse_ref = self.ground_truth_pse if self.is_synthetic and self.ground_truth_pse is not None else final_pse
+        jnd_ref = self.ground_truth_jnd if self.is_synthetic and self.ground_truth_jnd is not None else final_jnd
+        
+        if 'pse_values' in progressive_dict and pse_ref:
             pse_errors = []
             for pse_val in progressive_dict['pse_values']:
-                if np.isnan(pse_val):
-                    pse_errors.append(0)
-                else:
-                    error = abs(pse_val - final_pse) / (abs(final_pse) + 1e-10)
+                # Skip NaN values (exclude missing fits from AUC calculation)
+                if not np.isnan(pse_val):
+                    error = abs(pse_val - pse_ref) / (abs(pse_ref) + 1e-10)
                     pse_errors.append(error)
-            result['pse_auc'] = float(np.sum(pse_errors) / len(pse_errors)) if pse_errors else np.nan
+            # AUC = mean of valid errors (or NaN if all NaN)
+            result['pse_auc'] = float(np.mean(pse_errors)) if pse_errors else np.nan
         
-        if 'jnd_values' in progressive_dict and final_jnd:
+        if 'jnd_values' in progressive_dict and jnd_ref:
             jnd_errors = []
             for jnd_val in progressive_dict['jnd_values']:
-                if np.isnan(jnd_val):
-                    jnd_errors.append(0)
-                else:
-                    error = abs(jnd_val - final_jnd) / (abs(final_jnd) + 1e-10)
+                # Skip NaN values (exclude missing fits from AUC calculation)
+                if not np.isnan(jnd_val):
+                    error = abs(jnd_val - jnd_ref) / (abs(jnd_ref) + 1e-10)
                     jnd_errors.append(error)
-            result['jnd_auc'] = float(np.sum(jnd_errors) / len(jnd_errors)) if jnd_errors else np.nan
+            # AUC = mean of valid errors (or NaN if all NaN)
+            result['jnd_auc'] = float(np.mean(jnd_errors)) if jnd_errors else np.nan
         
         return result
 
@@ -370,13 +388,40 @@ class MetricsCalculator:
         """
         Master function: calculate ALL metrics from one GBF file.
         
-        Orchestrates B1-B5 calculations and combines results.
+        Orchestrates B1-B5 calculations and combines results into comprehensive
+        behavioral metrics for model comparison.
         
         Args:
             gbf_rows: GBF data rows (from read_gbf_file())
+                Each row contains: lat (latency in ms), res (success/failure), user_ans (response)
             
         Returns:
-            Comprehensive dict with all metrics (see docstring for details)
+            Comprehensive dict with metrics organized by category:
+            
+            **B1 - Progressive Psychometric (PSE/JND at each trial block):**
+            - pse_values: PSE estimates [block_40, block_60, ..., block_200]
+            - jnd_values: JND estimates [block_40, block_60, ..., block_200]
+            - slope_values: Slope estimates
+            
+            **B2 - Latency Statistics (stimulus properties at each trial block):**
+            - stimulus_center_*: Center of stimulus distribution at each block
+            - stimulus_spread_*: Spread (SD) of stimulus distribution
+            - asymmetry_index_*: Asymmetry of stimulus presentation
+            - lat_entropy_*: Shannon entropy of latency distribution
+            
+            **B3 - Posterior SD Convergence (posterior uncertainty at each block):**
+            - posterior_sd_pse_*: Posterior SD of PSE estimate
+            - posterior_sd_jnd_*: Posterior SD of JND estimate
+            
+            **B4 - Auto-referential (stability + convergence speed):**
+            - pse_stability_block: First block where PSE SD < 10% of final
+            - jnd_stability_block: First block where JND SD < 10% of final
+            - pse_auc: Area Under error Curve (lower = faster convergence)
+            - jnd_auc: Area Under error Curve for JND
+            
+            **B5 - Error Metrics (synthetic data only, vs ground truth):**
+            - pse_error_pct: Final PSE error as % of true value
+            - jnd_error_pct: Final JND error as % of true value
         """
         import time
         

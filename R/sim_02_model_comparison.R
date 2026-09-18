@@ -53,15 +53,15 @@ data_clean <- data_raw %>%
     trial_block = as.numeric(trial_block),
     trial_block_f = factor(trial_block),
     
-    # Calculate errors
-    pse_error     = pse_est - pse_true,
+    # Calculate errors (note: pse_error and jnd_error are now pre-computed in Excel)
+    pse_error     = pse - pse_true,
     pse_error_pct = abs(pse_error) / pse_true * 100,
-    jnd_error     = jnd_est - jnd_true,
+    jnd_error     = jnd - jnd_true,
     jnd_error_pct = abs(jnd_error) / jnd_true * 100,
     
     # Standardize for modeling
-    pse_est_z = scale(pse_est)[,1],
-    jnd_est_z = scale(jnd_est)[,1],
+    pse_est_z = scale(pse)[,1],
+    jnd_est_z = scale(jnd)[,1],
     
     pse_true_z = scale(pse_true)[,1],
     jnd_true_z = scale(jnd_true)[,1],
@@ -79,74 +79,32 @@ cat("  Trial blocks:", paste(sort(unique(data_clean$trial_block)), collapse = ",
 cat("  Subjects:", n_distinct(data_clean$subject_id), "\n")
 
 # ============================================================================== =
-# CONVERGENCE METRICS CALCULATION
+# CONVERGENCE METRICS - READ FROM EXCEL (NO RECALCULATION)
 # ============================================================================== =
 
-cat("\n=== Calculating Convergence Metrics ===\n")
+cat("\n=== Loading Pre-calculated Convergence Metrics from Excel ===\n")
 
-# 1. Stability Point: First trial count where estimate within 10% of final
-stability_data <- data_clean %>%
-  group_by(model, pse_true, jnd_true, subject_id) %>%
-  arrange(trial_block) %>%
-  mutate(
-    pse_final = last(pse_est),
-    jnd_final = last(jnd_est),
-    pse_error_pct_from_final = abs(pse_est - pse_final) / abs(pse_final) * 100,
-    jnd_error_pct_from_final = abs(jnd_est - jnd_final) / abs(jnd_final) * 100,
-    pse_stable = pse_error_pct_from_final < 10,
-    jnd_stable = jnd_error_pct_from_final < 10
+# NOTE: All convergence metrics are PRE-CALCULATED in the Excel file:
+# - pse_stability_block, jnd_stability_block (first trial block within 10% of ground truth)
+# - pse_auc, jnd_auc (cumulative distance from ground truth across all blocks)
+# - pse_error, pse_error_pct (final error vs ground truth)
+# - jnd_error, jnd_error_pct (final error vs ground truth)
+#
+# We extract unique values per subject (they are constant across trial_blocks).
+# NO recalculation in R - Excel is authoritative.
+
+convergence_metrics <- data_clean %>%
+  dplyr::select(
+    model, group, subject_id, pse_true, jnd_true,
+    pse_stability_block, jnd_stability_block,
+    pse_auc, jnd_auc,
+    pse_error, pse_error_pct,
+    jnd_error, jnd_error_pct
   ) %>%
-  summarise(
-    pse_stability_point = ifelse(any(pse_stable), min(trial_block[pse_stable]), 200),
-    jnd_stability_point = ifelse(any(jnd_stable), min(trial_block[jnd_stable]), 200),
-    pse_final_error = abs(last(pse_error)),
-    jnd_final_error = abs(last(jnd_error)),
-    pse_final_error_pct = abs(last(pse_error_pct)),
-    jnd_final_error_pct = abs(last(jnd_error_pct)),
-    .groups = "drop"
-  )
+  distinct() %>%
+  arrange(model, group, subject_id)
 
-# 2. Area Under Curve (AUC): Total distance from final estimate
-auc_data <- data_clean %>%
-  group_by(model, pse_true, jnd_true, subject_id) %>%
-  arrange(trial_block) %>%
-  mutate(
-    pse_final = last(pse_est),
-    jnd_final = last(jnd_est),
-    pse_diff = abs(pse_est - pse_final),
-    jnd_diff = abs(jnd_est - jnd_final)
-  ) %>%
-  summarise(
-    auc_pse = sum(pse_diff * 20),  # 20 = interval between trial blocks
-    auc_jnd = sum(jnd_diff * 20),
-    .groups = "drop"
-  )
-
-# 3. Convergence trajectory: Slope of convergence
-trajectory_data <- data_clean %>%
-  group_by(model, pse_true, jnd_true, subject_id) %>%
-  arrange(trial_block) %>%
-  mutate(
-    pse_final = last(pse_est),
-    jnd_final = last(jnd_est),
-    pse_error_from_final = abs(pse_est - pse_final),
-    jnd_error_from_final = abs(jnd_est - jnd_final)
-  ) %>%
-  summarise(
-    # Fit linear model to error vs trial_block
-    pse_slope = ifelse(n() > 1, 
-                       coef(lm(pse_error_from_final ~ trial_block))[2], 
-                       NA),
-    jnd_slope = ifelse(n() > 1, 
-                       coef(lm(jnd_error_from_final ~ trial_block))[2], 
-                       NA),
-    .groups = "drop"
-  )
-
-# Combine all metrics
-convergence_metrics <- stability_data %>%
-  left_join(auc_data, by = c("model", "pse_true", "jnd_true", "subject_id")) %>%
-  left_join(trajectory_data, by = c("model", "pse_true", "jnd_true", "subject_id"))
+cat(sprintf("  Loaded %d convergence metrics\n", nrow(convergence_metrics)))
 
 # ============================================================================== =
 # DESCRIPTIVE STATISTICS ====
@@ -163,10 +121,10 @@ pse_acc_desc <- convergence_metrics %>%
   group_by(model) %>%
   summarise(
     n = n(),
-    mean_error = mean(pse_final_error, na.rm = TRUE),
-    sd_error = sd(pse_final_error, na.rm = TRUE),
-    mean_error_pct = mean(pse_final_error_pct, na.rm = TRUE),
-    sd_error_pct = sd(pse_final_error_pct, na.rm = TRUE),
+    mean_error = mean(pse_error, na.rm = TRUE),
+    sd_error = sd(pse_error, na.rm = TRUE),
+    mean_error_pct = mean(pse_error_pct, na.rm = TRUE),
+    sd_error_pct = sd(pse_error_pct, na.rm = TRUE),
     .groups = "drop"
   )
 
@@ -176,10 +134,10 @@ jnd_acc_desc <- convergence_metrics %>%
   group_by(model) %>%
   summarise(
     n = n(),
-    mean_error = mean(jnd_final_error, na.rm = TRUE),
-    sd_error = sd(jnd_final_error, na.rm = TRUE),
-    mean_error_pct = mean(jnd_final_error_pct, na.rm = TRUE),
-    sd_error_pct = sd(jnd_final_error_pct, na.rm = TRUE),
+    mean_error = mean(jnd_error, na.rm = TRUE),
+    sd_error = sd(jnd_error, na.rm = TRUE),
+    mean_error_pct = mean(jnd_error_pct, na.rm = TRUE),
+    sd_error_pct = sd(jnd_error_pct, na.rm = TRUE),
     .groups = "drop"
   )
 
@@ -195,11 +153,11 @@ pse_stab_desc <- convergence_metrics %>%
   group_by(model) %>%
   summarise(
     n = n(),
-    mean = mean(pse_stability_point, na.rm = TRUE),
-    sd = sd(pse_stability_point, na.rm = TRUE),
-    median = median(pse_stability_point, na.rm = TRUE),
-    min = min(pse_stability_point, na.rm = TRUE),
-    max = max(pse_stability_point, na.rm = TRUE),
+    mean = mean(pse_stability_block, na.rm = TRUE),
+    sd = sd(pse_stability_block, na.rm = TRUE),
+    median = median(pse_stability_block, na.rm = TRUE),
+    min = min(pse_stability_block, na.rm = TRUE),
+    max = max(pse_stability_block, na.rm = TRUE),
     .groups = "drop"
   )
 
@@ -211,11 +169,11 @@ jnd_stab_desc <- convergence_metrics %>%
   group_by(model) %>%
   summarise(
     n = n(),
-    mean = mean(jnd_stability_point, na.rm = TRUE),
-    sd = sd(jnd_stability_point, na.rm = TRUE),
-    median = median(jnd_stability_point, na.rm = TRUE),
-    min = min(jnd_stability_point, na.rm = TRUE),
-    max = max(jnd_stability_point, na.rm = TRUE),
+    mean = mean(jnd_stability_block, na.rm = TRUE),
+    sd = sd(jnd_stability_block, na.rm = TRUE),
+    median = median(jnd_stability_block, na.rm = TRUE),
+    min = min(jnd_stability_block, na.rm = TRUE),
+    max = max(jnd_stability_block, na.rm = TRUE),
     .groups = "drop"
   )
 
@@ -227,10 +185,10 @@ auc_desc <- convergence_metrics %>%
   group_by(model) %>%
   summarise(
     n = n(),
-    mean_auc_pse = mean(auc_pse, na.rm = TRUE),
-    sd_auc_pse = sd(auc_pse, na.rm = TRUE),
-    mean_auc_jnd = mean(auc_jnd, na.rm = TRUE),
-    sd_auc_jnd = sd(auc_jnd, na.rm = TRUE),
+    mean_pse_auc = mean(pse_auc, na.rm = TRUE),
+    sd_pse_auc = sd(pse_auc, na.rm = TRUE),
+    mean_jnd_auc = mean(jnd_auc, na.rm = TRUE),
+    sd_jnd_auc = sd(jnd_auc, na.rm = TRUE),
     .groups = "drop"
   )
 
@@ -253,17 +211,10 @@ convergence_metrics <- convergence_metrics %>%
 # ..... PSE Final Error ====
 cat("\n--- PSE Final Error ---\n")
 
-anova_pse_err <- aovperm(pse_final_error ~ model + pse_true_z + jnd_true_z,
+anova_pse_err <- aovperm(pse_error ~ model + pse_true_z + jnd_true_z,
                          data = convergence_metrics,
                          np = 5000)
 print(anova_pse_err)
-#                   SS  df    F             parametric P(>F) resampled P(>F)
-# model      2.511e+01   2 8.772e-01           0.4165          0.4276
-# pse_true_z 1.732e-02   1 1.211e-03           0.9723          0.9692
-# jnd_true_z 1.976e+03   1 1.381e+02           0.0000          0.0002
-
-
-
 
 cat("\nANOVA for model effect:\n")
 print(anova_pse_err)
@@ -274,16 +225,12 @@ print_effect_sizes(effect_sizes_pse_err, "Effect Sizes for PSE Final Error (η²
 
 cat("\nPost-hoc pairwise comparisons:\n")
 
-res <- do_npar_anova_phpw(convergence_metrics, "model", "pse_final_error", "pse_true_z")
-# [1] "pse_final_error x pse_true_z splitted by model"
-# [1] "NOT SIGNIFICANT in ABS1 (H=21.788013376292, p=0.249228995912993)"
-# [1] "NOT SIGNIFICANT in REL1 (H=18.3911669045896, p=0.28431199770755)"
-# [1] "NOT SIGNIFICANT in REL2 (H=14.7851494951301, p=0.392997513832787)"
+res <- do_npar_anova_phpw(convergence_metrics, "model", "pse_error", "pse_true_z")
 
 # ..... JND Final Error ====
 
 cat("\n--- JND Final Error ---\n")
-anova_jnd_err <- aovperm(jnd_final_error ~ model + pse_true_z + jnd_true_z,
+anova_jnd_err <- aovperm(jnd_error ~ model + pse_true_z + jnd_true_z,
                          data = convergence_metrics,
                          np = 5000)
 
@@ -302,7 +249,7 @@ print_effect_sizes(effect_sizes_jnd_err, "Effect Sizes for JND Final Error (η²
 
 # ..... PSE Stability Point ====
 cat("\n--- PSE Stability Point ---\n")
-anova_pse_stab <- aovperm(pse_stability_point ~ model + pse_true_z + jnd_true_z,
+anova_pse_stab <- aovperm(pse_stability_block ~ model + pse_true_z + jnd_true_z,
                           data = convergence_metrics,
                           np = 5000)
 cat("\nANOVA for model effect:\n")
@@ -319,7 +266,7 @@ print_effect_sizes(effect_sizes_pse_stab, "Effect Sizes for PSE Stability Point 
 
 # ..... JND Stability Point ====
 cat("\n--- JND Stability Point ---\n")
-anova_jnd_stab <- aovperm(jnd_stability_point ~ model + pse_true_z + jnd_true_z,
+anova_jnd_stab <- aovperm(jnd_stability_block ~ model + pse_true_z + jnd_true_z,
                           data = convergence_metrics,
                           np = 5000)
 cat("\nANOVA for model effect:\n")
@@ -334,8 +281,8 @@ print(anova_jnd_stab)
 effect_sizes_jnd_stab <- extract_eta_squared(anova_jnd_stab)
 print_effect_sizes(effect_sizes_jnd_stab, "Effect Sizes for JND Stability Point (η²)")
 
-do_npar_anova_main(convergence_metrics, "jnd_stability_point", "model")
-# [1] "Main effect: jnd_stability_point ~ model, H = 11.4252, p = 0.0033"
+do_npar_anova_main(convergence_metrics, "jnd_stability_block", "model")
+# [1] "Main effect: jnd_stability_block ~ model, H = 11.4252, p = 0.0033"
 # Comparison   Stat   p.value  p.adjust
 # Comparison  Stat  p.value p.adjust
 # 1 ABS1 - REL1 = 0 1.708  0.08772  0.13160
@@ -344,7 +291,7 @@ do_npar_anova_main(convergence_metrics, "jnd_stability_point", "model")
 
 # ..... PSE AUC ====
 cat("\n--- PSE AUC (Convergence Speed) ---\n")
-anova_pse_auc <- aovperm(auc_pse ~ model + pse_true_z + jnd_true_z,
+anova_pse_auc <- aovperm(pse_auc ~ model + pse_true_z + jnd_true_z,
                          data = convergence_metrics,
                          np = 5000)
 cat("\nANOVA for model effect:\n")
@@ -361,8 +308,8 @@ print_effect_sizes(effect_sizes_pse_auc, "Effect Sizes for PSE AUC (η²)")
 
 cat("\nPost-hoc pairwise comparisons (Tukey):\n")
 
-do_npar_anova_main(convergence_metrics, "auc_pse", "model")
-# [1] "Main effect: auc_pse ~ model, H = 11.8676, p = 0.0026"
+do_npar_anova_main(convergence_metrics, "pse_auc", "model")
+# [1] "Main effect: pse_auc ~ model, H = 11.8676, p = 0.0026"
 # [1] "SIGNIFICANT - Running pairwise comparisons..."
 # Comparison   Stat  p.value p.adjust
 # 1 ABS1 - REL1 = 0 -1.329   0.1837 0.183700
@@ -371,7 +318,7 @@ do_npar_anova_main(convergence_metrics, "auc_pse", "model")
 
 # ..... JND AUC ====
 cat("\n--- JND AUC (Convergence Speed) ---\n")
-anova_jnd_auc <- aovperm(auc_jnd ~ model + pse_true_z + jnd_true_z,
+anova_jnd_auc <- aovperm(jnd_auc ~ model + pse_true_z + jnd_true_z,
                          data = convergence_metrics,
                          np = 5000)
 cat("\nANOVA for model effect:\n")
@@ -386,9 +333,9 @@ print(anova_jnd_auc)
 effect_sizes_jnd_auc <- extract_eta_squared(anova_jnd_auc)
 print_effect_sizes(effect_sizes_jnd_auc, "Effect Sizes for JND AUC (η²)")
 
-do_npar_anova_main(convergence_metrics, "auc_jnd", "model")
+do_npar_anova_main(convergence_metrics, "jnd_auc", "model")
 
-# [1] "Main effect: auc_jnd ~ model"
+# [1] "Main effect: jnd_auc ~ model"
 # [1] "H = 11.2766, p = 0.0036"
 # [1] "SIGNIFICANT - Running pairwise comparisons..."
 # Comparison   Stat   p.value  p.adjust

@@ -48,10 +48,10 @@ JND_GRID = [20, 40, 60]
 OFFSET = 500
 
 # Fixed axis ranges for all plots (for consistent grid assembly)
-X_MIN = 250
-X_MAX = 750
+X_MIN = 200
+X_MAX = 800
 Y_MIN = 0
-Y_MAX = 700
+Y_MAX = 500
 
 
 # ============================================================================
@@ -149,8 +149,8 @@ def plot_group_stimulus_distribution(
     # Fixed axis ranges and ticks for consistent grid assembly
     ax.set_xlim(X_MIN, X_MAX)
     ax.set_ylim(Y_MIN, Y_MAX)
-    ax.set_xticks([300, 400, 500, 600, 700])
-    ax.set_yticks([0, 200, 400, 600])
+    ax.set_xticks([200, 300, 400, 500, 600, 700, 800])
+    ax.set_yticks([0, 100, 200, 300, 400, 500])
     ax.tick_params(labelsize=4)
 
     if standalone:

@@ -24,7 +24,7 @@ cat("Data loaded:\n")
 cat(sprintf("  Total rows: %d\n", nrow(df)))
 cat(sprintf("  Models: %s\n", paste(levels(df$model), collapse = ", ")))
 cat(sprintf("  Trial blocks: %s\n", paste(sort(unique(df$trial_block)), collapse = ", ")))
-cat(sprintf("  Subjects per model: %d\n", length(unique(df$subject_id)) / 3))
+cat(sprintf("  Subjects per model: %d\n", round(length(unique(df$subject_id)) / 3)))
 cat("\n")
 
 # ============================================================================

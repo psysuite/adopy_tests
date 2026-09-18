@@ -32,6 +32,7 @@ from analysis.io.report_generator import (
     save_wide_format_to_excel,
     generate_long_format_from_dataframe,
     save_long_format_to_excel,
+    _validate_excel_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,10 @@ class UnifiedGBFProcessor:
         self.trial_blocks = trial_blocks or TRIAL_BLOCKS
         self.verbose = verbose
         self.use_multithread = use_multithread
+        
+        # Derive data_type-specific filenames (avoid real/synthetic collision)
+        self.wide_filename = f'{data_type}_data_wide.xlsx'
+        self.long_filename = f'{data_type}_data_long.xlsx'
         
         # Validate
         if data_type not in ['synthetic', 'real']:
@@ -211,7 +216,7 @@ class UnifiedGBFProcessor:
         
         Only called if use_multithread=True (for incremental processing).
         """
-        wide_path = self.output_dir / 'synthetic_data_wide.xlsx'
+        wide_path = self.output_dir / self.wide_filename  # Use data_type-specific filename
         if not wide_path.exists():
             return
         
@@ -339,8 +344,15 @@ class UnifiedGBFProcessor:
             wide_row: Row dict to append
         """
         with self._append_lock:
-            # Load or initialize wide DataFrame
-            wide_path = self.output_dir / 'synthetic_data_wide.xlsx'
+            # Load or initialize wide DataFrame (use data_type-specific filename)
+            wide_path = self.output_dir / self.wide_filename
+            
+            # Validate path for security
+            try:
+                wide_path = _validate_excel_path(str(wide_path))
+            except ValueError as e:
+                logger.error(f"Invalid Excel path: {e}")
+                return
             
             if wide_path.exists():
                 try:

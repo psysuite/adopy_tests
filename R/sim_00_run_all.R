@@ -31,7 +31,7 @@ library(here)
 # ==============================================================================
 root_dir        <- "/data/CODE/python/adopy_tests/"
 project_name    <- "R"
-sim_file_name   <- "stimulus_metrics_all_models.csv"
+# File path is now hardcoded in sim_01_import_data.R to use synthetic_data_long.xlsx
 
 project_dir <- paste0(root_dir, project_name, "/")
 

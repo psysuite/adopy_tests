@@ -26,6 +26,42 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _validate_excel_path(output_path: str) -> Path:
+    """
+    Validate Excel output path for security and format.
+    
+    Checks:
+    - Must have .xlsx extension
+    - Must not contain path traversal attempts
+    - Parent directory must be within project
+    
+    Args:
+        output_path: Path to validate
+        
+    Returns:
+        Validated Path object
+        
+    Raises:
+        ValueError: if path fails validation
+    """
+    path = Path(output_path)
+    
+    # Check extension
+    if path.suffix.lower() != '.xlsx':
+        raise ValueError(f"Excel path must end with .xlsx: {output_path}")
+    
+    # Resolve symlinks and check for path traversal
+    resolved = path.resolve()
+    project_root = Path(__file__).parent.parent.parent.resolve()
+    
+    try:
+        resolved.relative_to(project_root)
+    except ValueError:
+        raise ValueError(f"Excel path must be within project scope: {output_path}")
+    
+    return path
+
+
 
 
 def save_wide_format_to_excel(df_wide: pd.DataFrame, output_path: str) -> bool:
@@ -40,10 +76,16 @@ def save_wide_format_to_excel(df_wide: pd.DataFrame, output_path: str) -> bool:
         True if successful, False otherwise
     """
     try:
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        df_wide.to_excel(output_path, index=False, engine='openpyxl')
+        # Validate path for security
+        path = _validate_excel_path(output_path)
+        
+        path.parent.mkdir(parents=True, exist_ok=True)
+        df_wide.to_excel(path, index=False, engine='openpyxl')
         logger.info(f"✓ Saved wide format: {output_path} ({len(df_wide)} rows)")
         return True
+    except ValueError as e:
+        logger.error(f"✗ Invalid path for wide format: {e}")
+        return False
     except Exception as e:
         logger.error(f"✗ Error saving wide format to {output_path}: {e}")
         return False
@@ -131,10 +173,16 @@ def save_long_format_to_excel(df_long: pd.DataFrame, output_path: str) -> bool:
         True if successful, False otherwise
     """
     try:
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        df_long.to_excel(output_path, index=False, engine='openpyxl')
+        # Validate path for security
+        path = _validate_excel_path(output_path)
+        
+        path.parent.mkdir(parents=True, exist_ok=True)
+        df_long.to_excel(path, index=False, engine='openpyxl')
         logger.info(f"✓ Saved long format: {output_path} ({len(df_long)} rows)")
         return True
+    except ValueError as e:
+        logger.error(f"✗ Invalid path for long format: {e}")
+        return False
     except Exception as e:
         logger.error(f"✗ Error saving long format to {output_path}: {e}")
         return False

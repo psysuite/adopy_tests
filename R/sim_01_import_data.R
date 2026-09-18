@@ -24,7 +24,8 @@ if(!exists('project_name')){
 
 project_dir <- paste0(root_dir, project_name, "/")
 results_filepath <- paste0(project_dir, "results_simulations")
-sim_file_path <- paste0(project_dir, "indata/", sim_file_name)
+# Updated: use new Excel format instead of CSV
+sim_file_path <- paste0(project_dir, "indata/synthetic_data_long.xlsx")
 
 # Create output directories
 dir.create(file.path(results_filepath, "tables"), recursive = TRUE, showWarnings = FALSE)
@@ -46,4 +47,4 @@ if (! file.exists(sim_file_path)) {
 cat("Reading data from:", sim_file_path, "\n")
 
 # Import data
-data_raw <- read_csv(sim_file_path, show_col_types = FALSE) #, stringsAsFactors = FALSE)
+data_raw <- read_excel(sim_file_path)

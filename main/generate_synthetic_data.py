@@ -46,6 +46,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from main.config import *
 from analysis.orchestration.unified_processor import UnifiedGBFProcessor
+from analysis.io.report_generator import _validate_excel_path
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
@@ -244,8 +245,11 @@ def run_phase_b_calculate_metrics(verbose: bool = True, overwrite: bool = True) 
                 print(f"  Will recalculate from scratch instead...\n")
                 df_wide_existing = None
         
-        # Expected: 3 models × 9 groups × 20 subjects = 540 combinations
-        expected_combinations = 3 * 9 * 20
+        # Expected: derive from config (not hardcoded)
+        expected_combinations = len(MODELS) * len(PSE_GRID) * len(JND_GRID) * N_SUBJECTS_PER_GROUP
+        
+        if verbose:
+            print(f"Expected combinations: {len(MODELS)} models × {len(PSE_GRID)} PSE × {len(JND_GRID)} JND × {N_SUBJECTS_PER_GROUP} subjects = {expected_combinations}\n")
         
         if df_wide_existing is not None and len(processed_subjects) == expected_combinations:
             if verbose:
@@ -313,10 +317,14 @@ def run_phase_b_calculate_metrics(verbose: bool = True, overwrite: bool = True) 
         # Combine and save
         if len(all_dfs_wide) > 1:  # More than just the existing data
             df_wide = pd.concat(all_dfs_wide, ignore_index=True)
-            df_long = pd.DataFrame()  # Will regenerate from df_wide
+            
+            # IMPORTANT: Regenerate df_long from df_wide to avoid overwriting with empty DataFrame
+            from analysis.io.report_generator import generate_long_format_from_dataframe
+            df_long = generate_long_format_from_dataframe(df_wide, data_type='synthetic')
             
             if verbose:
                 print(f"✓ Phase B complete: {len(df_wide)} total subjects (incremental update)")
+                print(f"  Regenerated long format: {len(df_long)} rows\n")
             
             if not save_consolidated_excel(df_wide, df_long, verbose=True):
                 raise Exception(f"✗ Phase B: error saving Excel files")
@@ -335,24 +343,36 @@ def run_phase_b_calculate_metrics(verbose: bool = True, overwrite: bool = True) 
 def phase_c_generate_all_plots(df_wide: 'pd.DataFrame|None' = None, 
                                excel_dir: Path|None = None, verbose: bool = True) -> bool:
     """
-    Phase C: Generate ALL 30 PLOTS from Excel.
+    Phase C: Generate ALL 86 PLOTS from Excel.
     
-    - 9 local plots per modello (6 models × 3 models = 18)... wait, 3 models, 9 plots each = 27 total
-    - 3 plots per modello (posteriors): B_pse_sd, B_jnd_sd, A_heatmap
-    - 6 local plots per modello: grid_psychometric, stimulus_distribution, asymmetry_modulo, 
-      asymmetry_scatter_envelope, stimulus_center_evolution, stimulus_spread_evolution
-    - Total per modello: 6 (local) + 3 (posteriors) = 9 plots per modello
-    - Total for 3 modelli: 27 plots
-    - 3 comparison plots (consolidated): posteriors_b_pse_sd_evolution, posteriors_b_jnd_sd_evolution, 
-      posteriors_a_pse_sd_heatmap (no model name)
-    - Grand Total: 27 + 3 = 30 plots
+    **Per-Model Plots (27 per model × 3 models = 81 total):**
+    - Group plots: 18 plots per model (2 per group: stimulus distribution histogram + psychometric curve × 9 groups)
+    - Local analysis: 9 plots per model
+      * Grid Psychometric (3×3)
+      * Grid Stimulus Distribution (3×3)
+      * Asymmetry Modulo
+      * Asymmetry Scatter Envelope
+      * Stimulus Center Evolution
+      * Stimulus Spread Evolution
+      * Posterior SD PSE (3×3 grid, Level B)
+      * Posterior SD JND (3×3 grid, Level B)
+      * Posteriors Heatmap (Level A)
+    
+    **Comparison Plots (5 consolidated plots across 3 models):**
+    - Comparison Posteriors PSE (3×3 grid overlay)
+    - Comparison Posteriors JND (3×3 grid overlay)
+    - Comparison Posteriors Heatmap (Level A)
+    - Comparison Grid Psychometric (model averages)
+    - Comparison Latency KDE (kernel density estimates)
+    
+    **Grand Total: 81 (per-model) + 5 (comparison) = 86 plots**
     
     Output:
-    - Per modello plots: /data/output/sim_gridrnd/{MODEL}/
+    - Per model plots: /data/output/sim_gridrnd/{MODEL}/
     - Comparison plots: /data/output/plots/
     
     Args:
-        df_wide: DataFrame from Phase 3 (optional; loads from Excel if None)
+        df_wide: DataFrame from Phase B (optional; loads from Excel if None)
         excel_dir: Path to directory containing Excel files
         verbose: Print progress
     
@@ -390,8 +410,8 @@ def phase_c_generate_all_plots(df_wide: 'pd.DataFrame|None' = None,
     
     # Import all Phase C plot functions
     from analysis.plot.plotting import (
-        create_phase_c_local_grid_psychometric,
-        create_phase_c_local_stimulus_distribution,
+        create_phase_c_grid_psychometric_from_group_plots,
+        create_phase_c_grid_stimulus_distribution_from_group_plots,
         create_phase_c_asymmetry_modulo,
         create_phase_c_asymmetry_scatter_envelope,
         create_phase_c_stimulus_center_evolution,
@@ -402,6 +422,8 @@ def phase_c_generate_all_plots(df_wide: 'pd.DataFrame|None' = None,
         create_phase_c_comparison_posteriors_b_pse_sd,
         create_phase_c_comparison_posteriors_b_jnd_sd,
         create_phase_c_comparison_posteriors_a_heatmap,
+        create_phase_c_comparison_grid_psychometric,
+        create_phase_c_comparison_latency_kde_grid,
     )
     from main.config import PSE_GRID, JND_GRID, MODELS, OUTPUT_BASE
     
@@ -414,8 +436,8 @@ def phase_c_generate_all_plots(df_wide: 'pd.DataFrame|None' = None,
         plots_dir = project_root / "data" / "output" / "plots"
         plots_dir.mkdir(parents=True, exist_ok=True)
         
-        # ====== GENERATE PER-MODELLO PLOTS (27 plots) ======
-        print("GENERATING PER-MODELLO PLOTS (27 plots)\n")
+        # ====== GENERATE PER-MODELLO PLOTS (81 plots: 27 per model × 3) ======
+        print("GENERATING PER-MODEL PLOTS (27 plots per model × 3 = 81 total)\n")
         
         for model_name in MODELS:
             model_output_dir = project_root / OUTPUT_BASE / model_name
@@ -431,19 +453,23 @@ def phase_c_generate_all_plots(df_wide: 'pd.DataFrame|None' = None,
             if verbose:
                 print(f"{model_name}: Processing {len(df_model)} subjects")
             
-            # 6 local plots
+            # 2 grid plots (assembly of 3×3 = 9 group plots each)
             if verbose:
-                print(f"  Local plots (6):")
+                print(f"  Grid plots (2):")
             
-            if create_phase_c_local_grid_psychometric(df_model, model_name, PSE_GRID, JND_GRID, model_output_dir):
+            if create_phase_c_grid_psychometric_from_group_plots(model_name, PSE_GRID, JND_GRID, model_output_dir):
                 plot_count += 1
             else:
                 all_success = False
             
-            if create_phase_c_local_stimulus_distribution(df_model, model_name, PSE_GRID, JND_GRID, model_output_dir):
+            if create_phase_c_grid_stimulus_distribution_from_group_plots(model_name, PSE_GRID, JND_GRID, model_output_dir):
                 plot_count += 1
             else:
                 all_success = False
+            
+            # 4 local plots
+            if verbose:
+                print(f"  Local plots (4):")
             
             if create_phase_c_asymmetry_modulo(df_model, model_name, PSE_GRID, JND_GRID, model_output_dir):
                 plot_count += 1
@@ -467,9 +493,13 @@ def phase_c_generate_all_plots(df_wide: 'pd.DataFrame|None' = None,
             
             # 9 group plots (2 per group: histogram + psychometric)
             if verbose:
-                print(f"  Group plots (18 = 2 × 9 groups):")
+                print(f"  Group plots (18 = 2 per group × 9 groups):")
             
             from analysis.plot.plotting import plot_group_histograms, plot_group_psychometric, load_group_rows
+            
+            # Create temp directory for group plots
+            temp_dir = model_output_dir / "temp"
+            temp_dir.mkdir(parents=True, exist_ok=True)
             
             for group_idx, (pse_center, jnd_center) in enumerate(product(PSE_GRID, JND_GRID), 1):
                 group_dir = project_root / OUTPUT_BASE / model_name / f"group_{pse_center}_{jnd_center}"
@@ -496,20 +526,20 @@ def phase_c_generate_all_plots(df_wide: 'pd.DataFrame|None' = None,
                         all_rows_list = [group_rows]
                         group_label = f"{model_name} G{group_idx}: PSE={pse_center}, JND={jnd_center}"
                         
-                        # Histogram plot
+                        # Histogram plot → save in temp/
                         plot_group_histograms(
                             all_rows_list,
-                            str(model_output_dir),
+                            str(temp_dir),
                             f"{model_name}_G{group_idx}",
                             OFFSET,
                             group_label=group_label
                         )
                         plot_count += 1
                         
-                        # Psychometric plot
+                        # Psychometric plot → save in temp/
                         plot_group_psychometric(
                             all_rows_list,
-                            str(model_output_dir),
+                            str(temp_dir),
                             f"{model_name}_G{group_idx}",
                             OFFSET,
                             group_label=group_label
@@ -541,8 +571,8 @@ def phase_c_generate_all_plots(df_wide: 'pd.DataFrame|None' = None,
             
             print()
         
-        # ====== GENERATE COMPARISON PLOTS (3 plots consolidated) ======
-        print("GENERATING COMPARISON PLOTS (3 plots consolidated)\n")
+        # ====== GENERATE COMPARISON PLOTS (5 plots consolidated) ======
+        print("GENERATING COMPARISON PLOTS (5 plots consolidated)\n")
         print(f"  Comparison plots:")
         
         # Prepare data by model for comparison functions
@@ -562,12 +592,22 @@ def phase_c_generate_all_plots(df_wide: 'pd.DataFrame|None' = None,
             plot_count += 1
         else:
             all_success = False
+
+        if create_phase_c_comparison_grid_psychometric(PSE_GRID, JND_GRID, plots_dir):
+            plot_count += 1
+        else:
+            all_success = False
+
+        if create_phase_c_comparison_latency_kde_grid(PSE_GRID, JND_GRID, plots_dir):
+            plot_count += 1
+        else:
+            all_success = False
         
         print()
         
         if all_success and verbose:
             print(f"{'='*70}")
-            print(f"✓ PHASE C COMPLETE: {plot_count} plots generated successfully (target: 30)")
+            print(f"✓ PHASE C COMPLETE: {plot_count} plots generated (81 per-model + 5 comparison)")
             print(f"{'='*70}")
             print(f"\nPlot locations:")
             print(f"  - Per-modello: {OUTPUT_BASE}/{{MODEL}}/")
@@ -604,15 +644,25 @@ def save_consolidated_excel(df_wide: pd.DataFrame, df_long: pd.DataFrame, verbos
         
         # Save wide
         wide_path = EXCEL_OUTPUT_DIR / "synthetic_data_wide.xlsx"
-        df_wide.to_excel(wide_path, index=False)
-        if verbose:
-            print(f"  ✓ {wide_path} ({len(df_wide)} rows)")
+        try:
+            wide_path = _validate_excel_path(str(wide_path))
+            df_wide.to_excel(wide_path, index=False)
+            if verbose:
+                print(f"  ✓ {wide_path} ({len(df_wide)} rows)")
+        except ValueError as e:
+            print(f"✗ Invalid Excel path for wide: {e}")
+            return False
         
         # Save long
         long_path = EXCEL_OUTPUT_DIR / "synthetic_data_long.xlsx"
-        df_long.to_excel(long_path, index=False)
-        if verbose:
-            print(f"  ✓ {long_path} ({len(df_long)} rows)")
+        try:
+            long_path = _validate_excel_path(str(long_path))
+            df_long.to_excel(long_path, index=False)
+            if verbose:
+                print(f"  ✓ {long_path} ({len(df_long)} rows)")
+        except ValueError as e:
+            print(f"✗ Invalid Excel path for long: {e}")
+            return False
         
         return True
         
